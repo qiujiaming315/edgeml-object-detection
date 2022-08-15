@@ -255,9 +255,6 @@ def main(opts):
     # Load the offloading rewards for the training dataset.
     train_reward = np.load(opts.train_label)['mapi']
     val_reward = np.load(opts.val_label)['mapi']
-    # TODO: Delete this line.
-    train_reward = train_reward[:len(train_feature)]
-    val_reward = val_reward[:len(val_feature)]
     assert len(train_feature) == len(
         train_reward), "Inconsistent number of training feature maps and offloading rewards."
     assert len(val_feature) == len(
