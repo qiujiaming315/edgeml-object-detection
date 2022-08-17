@@ -46,7 +46,7 @@ def main(opts):
         estimates = [opts.estimates]
     mAP = test_map(weak_data, strong_data, labels, estimates, opts.offload_ratio)
     Path(opts.save).mkdir(parents=True, exist_ok=True)
-    np.savez(os.path.join(opts.save, f'test_map.npy'), mAP)
+    np.save(os.path.join(opts.save, f'test_map.npy'), mAP)
     return
 
 
