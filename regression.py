@@ -47,12 +47,15 @@ def fit_model(model, name, data, save_opts=_SaveOPT):
     # Load model if specified.
     if save_opts.load and save_opts.model_dir != '':
         reg, scaler = pickle.load(open(os.path.join(save_opts.model_dir, 'wts.pickle'), 'rb'))
+        # Normalize the data.
+        train_feature = scaler.transform(train_feature)
+        val_feature = scaler.transform(val_feature)
     else:
-        reg = model.fit(train_feature, train_reward)
         scaler = StandardScaler().fit(train_feature)
-    # Normalize the data.
-    train_feature = scaler.transform(train_feature)
-    val_feature = scaler.transform(val_feature)
+        # Normalize the data.
+        train_feature = scaler.transform(train_feature)
+        val_feature = scaler.transform(val_feature)
+        reg = model.fit(train_feature, train_reward)
     # Make predictions for both the training and test set.
     time1 = time.perf_counter()
     train_est = reg.predict(train_feature)
