@@ -32,7 +32,7 @@ def test_map(weak_data, strong_data, labels, reward_estimates, offload_ratio):
         mapi_mask = reward > mapi_thresh
         detection = [strong_data[s] if m else weak_data[s] for s, m in zip(range(num_img), mapi_mask)]
         # Compute the mAP after offloading using the estimated reward with a fixed threshold policy.
-        mAP.append(ap_per_class(*[np.concatenate(x, axis=0) for x in zip(*detection)], labels))
+        mAP.append(np.mean(ap_per_class(*[np.concatenate(x, axis=0) for x in zip(*detection)], labels)))
     return np.array(mAP)
 
 
