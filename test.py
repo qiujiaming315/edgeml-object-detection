@@ -39,7 +39,12 @@ def test_map(weak_data, strong_data, labels, reward_estimates, offload_ratio):
 def main(opts):
     weak_data, strong_data, labels = set_data(opts.weak, opts.strong, opts.label)
     # Compute realized mAP of each reward estimate.
-    mAP = test_map(weak_data, strong_data, labels, opts.estimates, opts.offload_ratio)
+    estimates = []
+    if isinstance(opts.estimates, list):
+        estimates = opts.estimates
+    elif opts.estimates is not None:
+        estimates = [opts.estimates]
+    mAP = test_map(weak_data, strong_data, labels, estimates, opts.offload_ratio)
     Path(opts.save).mkdir(parents=True, exist_ok=True)
     np.savez(os.path.join(opts.save, f'test_map.npz'), map=mAP)
     return
