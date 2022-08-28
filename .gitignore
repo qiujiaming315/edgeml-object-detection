@@ -2,3 +2,5 @@
 /.idea/
 /lib/__pycache__/
 /compute
+/train
+/train.ps1

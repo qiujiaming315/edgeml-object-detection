@@ -93,7 +93,7 @@ def load_feature(path, stage, pool=True, batch_size=128, func="avg", size=8):
     """
     # The stage names of yolov5 detectors.
     v5_names = ['Conv', 'Conv', 'C3', 'Conv', 'C3', 'Conv', 'C3', 'Conv', 'C3', 'SPPF', 'Conv', 'Upsample', 'Concat',
-                'C3', 'Conv', 'Upsample', 'Concat', 'C3', 'Conv', 'Concat', 'C3', 'Conv', 'Concat', 'C3']
+                'C3', 'Conv', 'Upsample', 'Concat', 'C3', 'Conv', 'Concat', 'C3', 'Conv', 'Concat', 'C3', 'output']
     data = list()
     # Read the data from each npy file.
     images = [f for f in os.listdir(path) if not os.path.isfile(os.path.join(path, f))]
@@ -118,3 +118,35 @@ def load_feature(path, stage, pool=True, batch_size=128, func="avg", size=8):
             file_data = np.load(file_path)
             data.append(file_data)
     return data
+
+
+def extract_output_feature(output_path, feature_path, num_class, k=25):
+    """
+    Extract and save features from detection output.
+    The feature extraction standard is adapted from the paper: https://arxiv.org/abs/1707.06399
+    Original implementation is available at https://github.com/funnyzhou/Adaptive_Feeding/blob/master/AF/cal_mAP.py
+    :param output_path: path to the (weak detector) detection output.
+    :param feature_path: directory where feature maps are stored, used to store the extracted output features.
+    :param num_class: number of classes in the dataset.
+    :param k: number of top-K confident bounding boxes to include in the extracted features.
+    """
+    # List names of the images whose output features need to be extracted.
+    img_names = [f for f in os.listdir(feature_path) if not os.path.isfile(os.path.join(feature_path, f))]
+    for img in img_names:
+        output_filename = os.path.join(output_path, img + ".txt")
+        feature = np.zeros((num_class + 5 * k), dtype=float)
+        # Collect features from top-K bounding boxes.
+        if os.path.isfile(output_filename):
+            with open(output_filename, 'r') as f:
+                lines = f.readlines()
+                file_data = [line.strip().split(' ') for line in lines]
+                # Keep the top-K bounding boxes.
+                file_data = file_data[:k]
+                # Parse the bounding boxes and extract features.
+                for data in file_data:
+                    feature[int(data[0])] += 1
+            file_data = np.array(file_data, dtype=float)[:, 1:]
+            feature[num_class:num_class + np.size(file_data)] = file_data.flatten()
+        save_path = os.path.join(feature_path, img, "stage24_output_features.npy")
+        np.save(save_path, feature)
+    return

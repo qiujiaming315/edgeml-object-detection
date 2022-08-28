@@ -81,7 +81,7 @@ def fit_LR(data):
 @dataclass
 class ENOpt:
     """Options for the Elastic net regression model."""
-    alpha: float = 1.0  # Constant that multiplies the penalty terms.
+    alpha: float = 0.01  # Constant that multiplies the penalty terms.
     l1_ratio: float = 0.5  # The ElasticNet mixing parameter.
 
 
@@ -252,7 +252,7 @@ def fit_CNN(data, opts=_CNNOPT, save_opts=_SaveOPT):
 
 def main(opts):
     # Load the weak detector feature maps for the training and validation dataset.
-    ifpool = opts.pool_size > 0
+    ifpool = opts.pool_size > 0 and opts.stage != 24
     train_feature = load_feature(opts.train_dir, opts.stage, pool=ifpool, size=opts.pool_size)
     val_feature = load_feature(opts.val_dir, opts.stage, pool=ifpool, size=opts.pool_size)
     # Load the offloading rewards for the training dataset.
@@ -272,7 +272,7 @@ def main(opts):
         print("Please select a regression model from 'LR' (Linear Regression), 'EN' (Elastic Net), " +
               "'BR' (Bayesian Ridge), 'SVR' (Support Vector Regression), 'GBR' (Gradient Boosting Regressor), " +
               "and 'CNN' (Convolutional Neural Network).")
-    if not ifpool:
+    if opts.pool_size == 0 and opts.stage != 24:
         # Check if model selection is consistent with pooling decision.
         assert opts.model == 'CNN', "Only fully convolutional NN can take input with different shapes. " + \
                                     "Please set model to 'CNN' if you choose to skip the RoI pooling step."
@@ -296,8 +296,9 @@ def getargs():
     args.add_argument('val_label', help="Path to the offloading reward for the validation set.")
     args.add_argument('save_dir', help="Directory to save the estimated offloading reward.")
     args.add_argument('--stage', type=int, default=23,
-                      help="Stage number of the selected feature map. For yolov5 detectors, " +
-                           "this should be a number between [0, 23].")
+                      help="Stage number of the selected feature map. For yolov5 detectors, this should be a number " +
+                           "between [0, 24]. Value between 0-23 stands for intermediate feature map from one of the " +
+                           "hidden layer. 24 stands for feature extracted from detection output.")
     args.add_argument('--pool_size', type=int, default=8,
                       help="Size (H,W) of the feature maps after using RoI pooling. If 0, skip RoI pooling.")
     args.add_argument('--model', type=str, default='LR',
