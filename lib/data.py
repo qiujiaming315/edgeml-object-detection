@@ -45,7 +45,7 @@ def set_data(weak, strong, label):
     """
     Set the data for computing mAPI from the weak and strong detectors' outputs and the ground truth labels.
     :param weak: path to the weak weak detector output files.
-    :param strong: path to the weak strong detector output files.
+    :param strong: path to the strong detector output files.
     :param label: path to the ground truth labels.
     :return: the weak detector's processed output, the strong detector's processed output, and the labels.
     """

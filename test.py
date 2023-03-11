@@ -10,14 +10,13 @@ from lib.metrics import ap_per_class
 """Test the performance of offloading reward estimation(s) by computing the realized mAP after offloading."""
 
 
-def test_map(weak_data, strong_data, labels, reward_estimates, offload_ratio):
+def test_map(weak_data, strong_data, labels, reward_estimates):
     """
     Compute realized mAP given reward estimates.
     :param weak_data: weak detector's processed output.
     :param strong_data: the strong detector's processed output.
     :param labels: the ground truth annotations.
     :param reward_estimates: a list containing path(s) to the file(s) with estimated reward.
-    :param offload_ratio: the offloading ratio.
     :return: an array of the computed mAP values, one for each reward estimate.
     """
     num_img = len(weak_data)
@@ -27,12 +26,15 @@ def test_map(weak_data, strong_data, labels, reward_estimates, offload_ratio):
     for f in reward_estimates:
         reward = np.load(f)['val_est']
         assert len(reward) == num_img, "Inconsistent number of images from the detection outputs and reward estimates."
-        mapi_thresh = reward[np.argsort(-reward)[int(num_img * offload_ratio)]]
-        mapi_thresh = max(0, mapi_thresh)
-        mapi_mask = reward > mapi_thresh
-        detection = [strong_data[s] if m else weak_data[s] for s, m in zip(range(num_img), mapi_mask)]
-        # Compute the mAP after offloading using the estimated reward with a fixed threshold policy.
-        mAP.append(np.mean(ap_per_class(*[np.concatenate(x, axis=0) for x in zip(*detection)], labels)))
+        mAP_ratios = []
+        for offload_ratio in np.arange(0.1, 1.1, 0.1):
+            mapi_thresh = reward[np.argsort(-reward)[min(int(num_img * offload_ratio), len(reward) - 1)]]
+            mapi_thresh = max(0, mapi_thresh)
+            mapi_mask = reward > mapi_thresh
+            detection = [strong_data[s] if m else weak_data[s] for s, m in zip(range(num_img), mapi_mask)]
+            # Compute the mAP after offloading using the estimated reward with a fixed threshold policy.
+            mAP_ratios.append(np.mean(ap_per_class(*[np.concatenate(x, axis=0) for x in zip(*detection)], labels)))
+        mAP.append(mAP_ratios)
     return np.array(mAP)
 
 
@@ -44,7 +46,7 @@ def main(opts):
         estimates = opts.estimates
     elif opts.estimates is not None:
         estimates = [opts.estimates]
-    mAP = test_map(weak_data, strong_data, labels, estimates, opts.offload_ratio)
+    mAP = test_map(weak_data, strong_data, labels, estimates)
     Path(opts.save).mkdir(parents=True, exist_ok=True)
     np.save(os.path.join(opts.save, f'test_map.npy'), mAP)
     return
@@ -57,8 +59,8 @@ def getargs():
     args.add_argument('strong', help="Path to the strong detector output files (for the validation set).")
     args.add_argument('label', help="Path to the ground truth labels.")
     args.add_argument('save', help="Path to save the computed mAPI results.")
-    args.add_argument('--offload_ratio', type=float, default=0.1,
-                      help="Offloading ratio for evaluating the estimated offloading reward.")
+    # args.add_argument('--offload_ratio', type=float, default=0.1,
+    #                   help="Offloading ratio for evaluating the estimated offloading reward.")
     args.add_argument('--estimates', nargs='+', type=str, help='Reward estimation file(s) to be evaluated.')
     return args.parse_args()
 

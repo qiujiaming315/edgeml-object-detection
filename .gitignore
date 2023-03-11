@@ -3,4 +3,6 @@
 /lib/__pycache__/
 /compute
 /train
+/train_colab
 /train.ps1
+/test.ps1

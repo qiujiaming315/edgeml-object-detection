@@ -8,9 +8,10 @@ from pathlib import Path
 from typing import List
 
 from sklearn.preprocessing import StandardScaler
-from sklearn.linear_model import LinearRegression, ElasticNet, BayesianRidge
-from sklearn.svm import SVR
-from sklearn.ensemble import GradientBoostingRegressor
+from sklearn.linear_model import LinearRegression, ElasticNet, BayesianRidge, SGDRegressor
+from sklearn.svm import SVR, LinearSVR
+from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
+from sklearn.neighbors import KNeighborsRegressor
 from sklearn.metrics import mean_squared_error as mse
 
 from lib.data import load_feature
@@ -64,7 +65,7 @@ def fit_model(model, name, data, save_opts=_SaveOPT):
     time3 = time.perf_counter()
     train_time, val_time = (time2 - time1) / len(train_reward), (time3 - time2) / len(val_reward)
     train_mse, val_mse = mse(train_reward, train_est), mse(val_reward, val_est)
-    print(f"Trained {name} model with training MSE:{train_mse}, validation MSE:{val_mse}")
+    print(f"Trained {name} model with training MSE: {train_mse:.3f}, validation MSE: {val_mse:.3f}")
     # Save model if specified.
     if save_opts.save and save_opts.model_dir != '':
         Path(save_opts.model_dir).mkdir(parents=True, exist_ok=True)
@@ -81,7 +82,7 @@ def fit_LR(data):
 @dataclass
 class ENOpt:
     """Options for the Elastic net regression model."""
-    alpha: float = 0.01  # Constant that multiplies the penalty terms.
+    alpha: float = 0.005  # Constant that multiplies the penalty terms.
     l1_ratio: float = 0.5  # The ElasticNet mixing parameter.
 
 
@@ -113,12 +114,27 @@ def fit_BR(data, opts=_BROPT):
 
 
 @dataclass
+class SGDOpt:
+    """Options for the Stochastic Gradient Descent regression model."""
+    alpha: float = 0.0001  # Constant that multiplies the regularization term.
+
+
+_SGDOPT = SGDOpt()
+
+
+def fit_SGD(data, opts=_SGDOPT):
+    """Fit a Stochastic Gradient Descent regressor."""
+    model = SGDRegressor(alpha=opts.alpha)
+    return fit_model(model, "Stochastic Gradient Descent Regressor", data)
+
+
+@dataclass
 class SVROpt:
     """Options for the support vector regression model."""
-    kernel: str = 'rbf'  # Specifies the kernel type to be used in the algorithm. Choose from 'linear', 'poly', 'rbf',
-    # 'sigmoid', 'precomputed'.
-    C: float = 1.0  # Regularization parameter.
+    C: float = 0.1  # Regularization parameter.
     epsilon: float = 0.1  # Epsilon in the epsilon-SVR model.
+    kernel: str = 'linear'  # Specifies the kernel type to be used in the algorithm. Choose from 'linear', 'poly', 'rbf',
+    # 'sigmoid', 'precomputed'.
 
 
 _SVROPT = SVROpt()
@@ -131,9 +147,43 @@ def fit_SVR(data, opts=_SVROPT):
 
 
 @dataclass
+class LSVROpt:
+    """Options for the support vector regression model."""
+    C: float = 0.1  # Regularization parameter.
+    epsilon: float = 0.1  # Epsilon in the epsilon-SVR model.
+
+
+_LSVROPT = LSVROpt()
+
+
+def fit_LSVR(data, opts=_LSVROPT):
+    """Fit a linear support vector regression model."""
+    model = LinearSVR(C=opts.C, epsilon=opts.epsilon)
+    return fit_model(model, "Linear Support Vector Regression", data)
+
+
+@dataclass
+class RFROpt:
+    """Options for the Random Forest regression model."""
+    n_estimators: int = 100  # The number of trees in the forest.
+    max_depth: int = 10  # The maximum depth of the tree.
+    min_samples_split: int = 100  # The minimum number of samples required to split an internal node.
+
+
+_RFROPT = RFROpt()
+
+
+def fit_RFR(data, opts=_RFROPT):
+    """Fit a Random Forest Regressor."""
+    model = RandomForestRegressor(n_estimators=opts.n_estimators, max_depth=opts.max_depth,
+                                  min_samples_split=opts.min_samples_split)
+    return fit_model(model, "Random Forest Regressor", data)
+
+
+@dataclass
 class GBROpt:
     """Options for the Gradient Boosting regression model."""
-    learning_rate: float = 0.1
+    learning_rate: float = 0.1  # Learning rate shrinks the contribution of each tree by learning_rate.
     n_estimators: int = 1000  # The number of boosting stages to perform.
     subsample: float = 1.0  # The fraction of samples to be used for fitting the individual base learners.
 
@@ -149,8 +199,23 @@ def fit_GBR(data, opts=_GBROPT):
 
 
 @dataclass
+class KNROpt:
+    """Options for the K-nearest Neighbors regression model."""
+    n_neighbors: int = 20  # Number of neighbors to use.
+
+
+_KNROPT = KNROpt()
+
+
+def fit_KNR(data, opts=_KNROPT):
+    """Fit a K Neighbors Regressor."""
+    model = KNeighborsRegressor(n_neighbors=opts.n_neighbors)
+    return fit_model(model, "K Neighbors Regressor", data)
+
+
+@dataclass
 class CNNOpt:
-    """Options for the Gradient Boosting regression model."""
+    """Options for the Convolutional Neural Network model."""
     learning_rate: float = 1e-3  # Initial learning rate.
     gamma: float = 0.1  # Scale for updating learning rate at each milestone.
     milestones: List = field(default_factory=lambda: [10, 15, 20])  # Epochs to update the learning rate.
@@ -263,14 +328,16 @@ def main(opts):
     assert len(val_feature) == len(
         val_reward), "Inconsistent number of validation feature maps and offloading rewards."
     # Select and fit the regression model.
-    model_names = ['LR', 'EN', 'BR', 'SVR', 'GBR', 'CNN']
-    models = [fit_LR, fit_EN, fit_BR, fit_SVR, fit_GBR, fit_CNN]
+    model_names = ['LR', 'EN', 'BR', 'SGD', 'SVR', 'LSVR', 'RFR', 'GBR', 'KNR', 'CNN']
+    models = [fit_LR, fit_EN, fit_BR, fit_SGD, fit_SVR, fit_LSVR, fit_RFR, fit_GBR, fit_KNR, fit_CNN]
     try:
         model_idx = model_names.index(opts.model)
         model = models[model_idx]
     except ValueError:
         print("Please select a regression model from 'LR' (Linear Regression), 'EN' (Elastic Net), " +
-              "'BR' (Bayesian Ridge), 'SVR' (Support Vector Regression), 'GBR' (Gradient Boosting Regressor), " +
+              "'BR' (Bayesian Ridge), 'SGD' (Stochastic Gradient Descent), 'SVR' (Support Vector Regression), " +
+              "'LSVR' (Linear Support Vector Regression), 'GBR' (Gradient Boosting Regressor), " +
+              "'RFR' (Random Forest Regressor), 'KNR' (K-nearest Neighbors Regressor), " +
               "and 'CNN' (Convolutional Neural Network).")
     if opts.pool_size == 0 and opts.stage != 24:
         # Check if model selection is consistent with pooling decision.
@@ -283,7 +350,7 @@ def main(opts):
     result = model((train_feature, val_feature, train_reward, val_reward))
     # Save the estimated offloading reward.
     Path(opts.save_dir).mkdir(parents=True, exist_ok=True)
-    np.savez(os.path.join(opts.save_dir, f'{opts.model}_estimate.npz'), **result)
+    np.savez(os.path.join(opts.save_dir, f'estimate.npz'), **result)
     return
 
 
@@ -303,8 +370,10 @@ def getargs():
                       help="Size (H,W) of the feature maps after using RoI pooling. If 0, skip RoI pooling.")
     args.add_argument('--model', type=str, default='LR',
                       help="Type of the regression model. Available choices include 'LR' (Linear Regression), " +
-                           "'EN' (Elastic Net), 'BR' (Bayesian Ridge), 'SVR' (Support Vector Regression), " +
-                           "'GBR' (Gradient Boosting Regressor), and 'CNN' (Convolutional Neural Network).")
+                           "'EN' (Elastic Net), 'BR' (Bayesian Ridge), 'SGD' (Stochastic Gradient Descent), " +
+                           "'SVR' (Support Vector Regression), 'LSVR' (Linear Support Vector Regression), " +
+                           "'RFR' (Random Forest Regressor), 'GBR' (Gradient Boosting Regressor), " +
+                           "'KNR' (K-nearest Neighbors Regressor),  and 'CNN' (Convolutional Neural Network).")
     args.add_argument('--model_dir', type=str, default='', help="Directory to save the model weights.")
     return args.parse_args()
 
