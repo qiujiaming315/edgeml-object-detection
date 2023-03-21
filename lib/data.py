@@ -49,7 +49,7 @@ def set_data(weak, strong, label):
     :param label: path to the ground truth labels.
     :return: the weak detector's processed output, the strong detector's processed output, and the labels.
     """
-    img_names = os.listdir(label)
+    img_names = sorted(os.listdir(label))
     weak_data = load_data(weak, img_names, True)
     strong_data = load_data(strong, img_names, True)
     labels = load_data(label, img_names)
@@ -96,7 +96,7 @@ def load_feature(path, stage, pool=True, batch_size=128, func="avg", size=8):
                 'C3', 'Conv', 'Upsample', 'Concat', 'C3', 'Conv', 'Concat', 'C3', 'Conv', 'Concat', 'C3', 'output']
     data = list()
     # Read the data from each npy file.
-    images = [f for f in os.listdir(path) if not os.path.isfile(os.path.join(path, f))]
+    images = sorted([f for f in os.listdir(path) if not os.path.isfile(os.path.join(path, f))])
     if pool:
         pool_func = roi_align if func == "avg" else roi_pool
         # Split images into batches and resize the feature maps through roi pooling.
@@ -131,7 +131,7 @@ def extract_output_feature(output_path, feature_path, num_class, k=25):
     :param k: number of top-K confident bounding boxes to include in the extracted features.
     """
     # List names of the images whose output features need to be extracted.
-    img_names = [f for f in os.listdir(feature_path) if not os.path.isfile(os.path.join(feature_path, f))]
+    img_names = sorted([f for f in os.listdir(feature_path) if not os.path.isfile(os.path.join(feature_path, f))])
     for img in img_names:
         output_filename = os.path.join(output_path, img + ".txt")
         feature = np.zeros((num_class + 5 * k), dtype=float)

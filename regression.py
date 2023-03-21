@@ -149,7 +149,7 @@ def fit_SVR(data, opts=_SVROPT):
 @dataclass
 class LSVROpt:
     """Options for the support vector regression model."""
-    C: float = 0.1  # Regularization parameter.
+    C: float = 0.01  # Regularization parameter.
     epsilon: float = 0.1  # Epsilon in the epsilon-SVR model.
 
 
@@ -201,7 +201,7 @@ def fit_GBR(data, opts=_GBROPT):
 @dataclass
 class KNROpt:
     """Options for the K-nearest Neighbors regression model."""
-    n_neighbors: int = 20  # Number of neighbors to use.
+    n_neighbors: int = 100  # Number of neighbors to use.
 
 
 _KNROPT = KNROpt()
@@ -218,14 +218,14 @@ class CNNOpt:
     """Options for the Convolutional Neural Network model."""
     learning_rate: float = 1e-3  # Initial learning rate.
     gamma: float = 0.1  # Scale for updating learning rate at each milestone.
-    milestones: List = field(default_factory=lambda: [10, 15, 20])  # Epochs to update the learning rate.
-    max_epoch: int = 25  # Maximum number of epochs for training.
+    milestones: List = field(default_factory=lambda: [100, 150, 200, 250])  # Epochs to update the learning rate.
+    max_epoch: int = 300  # Maximum number of epochs for training.
     batch_size: int = 64  # Batch size for model training.
-    channels: List = field(default_factory=lambda: [256, 128, 32])  # Number of channels in each conv layer.
-    kernels: List = field(default_factory=lambda: [3, 3])  # Kernel size for each conv layer.
-    pools: List = field(default_factory=lambda: [True, True])  # Whether max-pooling each conv layer.
-    linear: List = field(default_factory=lambda: [])  # Number of features in each linear after the conv layers.
-    test_epoch: int = 5  # Number of epochs for periodic test using the validation set.
+    channels: List = field(default_factory=lambda: [])  # Number of channels in each conv layer.
+    kernels: List = field(default_factory=lambda: [])  # Kernel size for each conv layer.
+    pools: List = field(default_factory=lambda: [])  # Whether max-pooling each conv layer.
+    linear: List = field(default_factory=lambda: [145, 1])  # Number of features in each linear after the conv layers.
+    test_epoch: int = 1  # Number of epochs for periodic test using the validation set.
 
 
 _CNNOPT = CNNOpt()
@@ -254,12 +254,13 @@ def fit_CNN(data, opts=_CNNOPT, save_opts=_SaveOPT):
     # Declare loss function, optimizer, and scheduler.
     loss_fn = torch.nn.MSELoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=opts.learning_rate)
-    scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=opts.milestones, gamma=0.1)
+    scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=opts.milestones, gamma=opts.gamma)
 
     # Define the training and test function.
     def train(dataloader, model, loss_fn, optimizer):
         size = len(dataloader.dataset)
         model.train()
+        train_loss = 0
         for batch, (X, y) in enumerate(dataloader):
             X, y = X.to(device), y.to(device)
             # Compute prediction error
@@ -269,9 +270,10 @@ def fit_CNN(data, opts=_CNNOPT, save_opts=_SaveOPT):
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
-            if batch % 100 == 0:
-                loss, current = loss.item(), batch * len(X)
-                print(f"loss: {loss:>7f}  [{current:>5d}/{size:>5d}]")
+            train_loss += loss.item()
+            if batch % 50 == 0:
+                current = (batch + 1) * len(X)
+                print(f"loss: {train_loss / (batch + 1):>7f}  [{current:>5d}/{size:>5d}]")
 
     def test(dataloader, model, loss_fn):
         num_batches = len(dataloader)
@@ -350,7 +352,7 @@ def main(opts):
     result = model((train_feature, val_feature, train_reward, val_reward))
     # Save the estimated offloading reward.
     Path(opts.save_dir).mkdir(parents=True, exist_ok=True)
-    np.savez(os.path.join(opts.save_dir, f'estimate.npz'), **result)
+    np.savez(os.path.join(opts.save_dir, 'estimate.npz'), **result)
     return
 
 

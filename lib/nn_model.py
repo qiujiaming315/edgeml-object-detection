@@ -16,7 +16,7 @@ class EdgeDetectionDataset(Dataset):
     def __getitem__(self, idx):
         x = self.inputs[idx]
         label = self.labels[idx]
-        x = torch.from_numpy(x)
+        x = torch.from_numpy(x).to(torch.float32)
         label = torch.tensor([label], dtype=torch.float32)
         return x, label
 
