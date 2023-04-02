@@ -221,15 +221,14 @@ class CNNOpt:
     learning_rate: float = 1e-3  # Initial learning rate.
     gamma: float = 0.1  # Scale for updating learning rate at each milestone.
     weight_decay: float = 1e-5  # Weight decay parameter for optimizer.
-    milestones: List = field(default_factory=lambda: [50, 100, 150])  # Epochs to update the learning rate.
-    max_epoch: int = 200  # Maximum number of epochs for training.
+    milestones: List = field(default_factory=lambda: [50, 65, 75])  # Epochs to update the learning rate.
+    max_epoch: int = 80  # Maximum number of epochs for training.
     batch_size: int = 64  # Batch size for model training.
-    channels: List = field(default_factory=lambda: [256, 256, 256, 256])  # Number of channels in each conv layer.
-    kernels: List = field(default_factory=lambda: [3, 3, 3])  # Kernel size for each conv layer.
-    pools: List = field(default_factory=lambda: [True, True, True])  # Whether max-pooling each conv layer.
+    channels: List = field(default_factory=lambda: [256, 128])  # Number of channels in each conv layer.
+    kernels: List = field(default_factory=lambda: [3])  # Kernel size for each conv layer.
+    pools: List = field(default_factory=lambda: [True])  # Whether max-pooling each conv layer.
     linear: List = field(
-        default_factory=lambda: [1024, 1024, 512, 128, 64,
-                                 1])  # Number of features in each linear after the conv layers.
+        default_factory=lambda: [8192, 1024, 128, 1])  # Number of features in each linear after the conv layers.
     test_epoch: int = 1  # Number of epochs for periodic test using the validation set.
 
 
@@ -332,7 +331,7 @@ def CNN_plot(train_loss, test_loss, test_epoch, lr_schedule):
     """Visualize the training of CNN model."""
     # Create the plot
     plt.rc("font", family="DejaVu Sans")
-    plt.rcParams['figure.figsize'] = (25, 10)
+    plt.rcParams['figure.figsize'] = (15, 10)
     fig, ax = plt.subplots()
     # Configure the subplot setting
     ax.tick_params(axis='x', labelsize=35)
@@ -360,6 +359,7 @@ def CNN_plot(train_loss, test_loss, test_epoch, lr_schedule):
     ax_handles, ax_labels = ax.get_legend_handles_labels()
     ax.legend(ax_handles, ax_labels, fontsize=20)
     plt.tight_layout()
+    plt.savefig('./cnn_training.pdf', bbox_inches='tight')
     plt.show()
     return
 

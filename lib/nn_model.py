@@ -58,7 +58,9 @@ class EdgeDetectionNet(nn.Module):
         :param pool: if max pooling is applied.
         :return: the constructed convolutional stack.
         """
-        modules = [nn.Conv2d(in_channels, out_channels, kernel_size, padding='same'),
+        conv_layer = nn.Conv2d(in_channels, out_channels, kernel_size, padding='same')
+        nn.init.kaiming_uniform_(conv_layer.weight)
+        modules = [conv_layer,
                    nn.BatchNorm2d(out_channels),
                    nn.LeakyReLU(0.01),
                    nn.Dropout(0.4)]
@@ -75,7 +77,9 @@ class EdgeDetectionNet(nn.Module):
         :param last: whether it is the last layer.
         :return: the constructed linear stack.
         """
-        modules = [nn.Linear(in_features, out_features)]
+        linear_layer = nn.Linear(in_features, out_features)
+        torch.nn.init.kaiming_uniform_(linear_layer.weight)
+        modules = [linear_layer]
         if not last:
             modules.append(nn.BatchNorm1d(out_features)),
             modules.append(nn.LeakyReLU(0.01))
