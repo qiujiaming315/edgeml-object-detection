@@ -60,7 +60,8 @@ class EdgeDetectionNet(nn.Module):
         """
         modules = [nn.Conv2d(in_channels, out_channels, kernel_size, padding='same'),
                    nn.BatchNorm2d(out_channels),
-                   nn.ReLU()]
+                   nn.LeakyReLU(0.01),
+                   nn.Dropout(0.4)]
         if pool:
             modules.append(self.pool)
         conv = nn.Sequential(*modules)
@@ -76,8 +77,9 @@ class EdgeDetectionNet(nn.Module):
         """
         modules = [nn.Linear(in_features, out_features)]
         if not last:
-            modules.append(nn.ReLU())
-            modules.append(nn.Dropout())
+            modules.append(nn.BatchNorm1d(out_features)),
+            modules.append(nn.LeakyReLU(0.01))
+            modules.append(nn.Dropout(0.2))
         linear = nn.Sequential(*modules)
         return linear
 

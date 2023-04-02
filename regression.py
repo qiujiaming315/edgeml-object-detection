@@ -3,6 +3,8 @@ import argparse
 import os
 import time
 import pickle
+import matplotlib.pyplot as plt
+from matplotlib.lines import Line2D
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List
@@ -218,20 +220,23 @@ class CNNOpt:
     """Options for the Convolutional Neural Network model."""
     learning_rate: float = 1e-3  # Initial learning rate.
     gamma: float = 0.1  # Scale for updating learning rate at each milestone.
-    milestones: List = field(default_factory=lambda: [100, 150, 200, 250])  # Epochs to update the learning rate.
-    max_epoch: int = 300  # Maximum number of epochs for training.
+    weight_decay: float = 1e-5  # Weight decay parameter for optimizer.
+    milestones: List = field(default_factory=lambda: [50, 100, 150])  # Epochs to update the learning rate.
+    max_epoch: int = 200  # Maximum number of epochs for training.
     batch_size: int = 64  # Batch size for model training.
-    channels: List = field(default_factory=lambda: [])  # Number of channels in each conv layer.
-    kernels: List = field(default_factory=lambda: [])  # Kernel size for each conv layer.
-    pools: List = field(default_factory=lambda: [])  # Whether max-pooling each conv layer.
-    linear: List = field(default_factory=lambda: [145, 1])  # Number of features in each linear after the conv layers.
+    channels: List = field(default_factory=lambda: [256, 256, 256, 256])  # Number of channels in each conv layer.
+    kernels: List = field(default_factory=lambda: [3, 3, 3])  # Kernel size for each conv layer.
+    pools: List = field(default_factory=lambda: [True, True, True])  # Whether max-pooling each conv layer.
+    linear: List = field(
+        default_factory=lambda: [1024, 1024, 512, 128, 64,
+                                 1])  # Number of features in each linear after the conv layers.
     test_epoch: int = 1  # Number of epochs for periodic test using the validation set.
 
 
 _CNNOPT = CNNOpt()
 
 
-def fit_CNN(data, opts=_CNNOPT, save_opts=_SaveOPT):
+def fit_CNN(data, opts=_CNNOPT, save_opts=_SaveOPT, plot=True):
     """Fit a Convolutional Neural Network to predict offloading reward."""
     # Import pytorch.
     import torch
@@ -253,12 +258,12 @@ def fit_CNN(data, opts=_CNNOPT, save_opts=_SaveOPT):
         model.load_state_dict(torch.load(os.path.join(save_opts.model_dir, 'wts.pth')))
     # Declare loss function, optimizer, and scheduler.
     loss_fn = torch.nn.MSELoss()
-    optimizer = torch.optim.Adam(model.parameters(), lr=opts.learning_rate)
+    optimizer = torch.optim.Adam(model.parameters(), lr=opts.learning_rate, weight_decay=opts.weight_decay)
     scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=opts.milestones, gamma=opts.gamma)
 
     # Define the training and test function.
     def train(dataloader, model, loss_fn, optimizer):
-        size = len(dataloader.dataset)
+        num_batches, size = len(dataloader), len(dataloader.dataset)
         model.train()
         train_loss = 0
         for batch, (X, y) in enumerate(dataloader):
@@ -274,6 +279,7 @@ def fit_CNN(data, opts=_CNNOPT, save_opts=_SaveOPT):
             if batch % 50 == 0:
                 current = (batch + 1) * len(X)
                 print(f"loss: {train_loss / (batch + 1):>7f}  [{current:>5d}/{size:>5d}]")
+        return train_loss / num_batches
 
     def test(dataloader, model, loss_fn):
         num_batches = len(dataloader)
@@ -286,14 +292,19 @@ def fit_CNN(data, opts=_CNNOPT, save_opts=_SaveOPT):
                 test_loss += loss_fn(pred, y).item()
         test_loss /= num_batches
         print(f"Avg Test Loss: {test_loss:>8f} \n")
+        return test_loss
 
     # The training loop.
+    train_loss, test_loss = list(), list()
     for t in range(opts.max_epoch):
         print(f"Epoch {t + 1}\n-------------------------------")
-        train(train_dataloader, model, loss_fn, optimizer)
+        train_loss.append(train(train_dataloader, model, loss_fn, optimizer))
         if t % opts.test_epoch == 0:
-            test(val_dataloader, model, loss_fn)
+            test_loss.append(test(val_dataloader, model, loss_fn))
         scheduler.step()
+    # Create a plot to visualize the training and test loss as a function of epoch number.
+    if plot:
+        CNN_plot(train_loss, test_loss, opts.test_epoch, opts.milestones)
     # Estimate the offloading reward for both training and validation set.
     with torch.no_grad():
         train_est, val_est = list(), list()
@@ -315,6 +326,42 @@ def fit_CNN(data, opts=_CNNOPT, save_opts=_SaveOPT):
         Path(save_opts.model_dir).mkdir(parents=True, exist_ok=True)
         torch.save(model.state_dict(), os.path.join(save_opts.model_dir, 'wts.pth'))
     return {"train_est": train_est, "val_est": val_est, "train_time": train_time, "val_time": val_time}
+
+
+def CNN_plot(train_loss, test_loss, test_epoch, lr_schedule):
+    """Visualize the training of CNN model."""
+    # Create the plot
+    plt.rc("font", family="DejaVu Sans")
+    plt.rcParams['figure.figsize'] = (25, 10)
+    fig, ax = plt.subplots()
+    # Configure the subplot setting
+    ax.tick_params(axis='x', labelsize=35)
+    ax.tick_params(axis='y', labelsize=35)
+    ax.yaxis.grid(True, color='#C0C0C0')
+    ax.xaxis.grid(True, color='#C0C0C0')
+    ax.spines['top'].set_color('#606060')
+    ax.spines['bottom'].set_color('#606060')
+    ax.spines['left'].set_color('#606060')
+    ax.spines['right'].set_color('#606060')
+    ax.set_xlabel("Number of Epochs", labelpad=25, color='#333333', size=40)
+    ax.set_ylabel("Model Loss", labelpad=30, color='#333333', size=35)
+    # Plot the loss.
+    ax.plot(np.arange(len(train_loss)) + 1, train_loss, linewidth=3, color='red', marker='o', markersize=15,
+            label="train error")
+    ax.plot(np.arange(1, len(train_loss) + 1, test_epoch), test_loss, linewidth=3, color='blue', marker='o',
+            markersize=15, label="test error")
+    # Plot the scheduled learning rate drop epochs.
+    for idx, sched in enumerate(lr_schedule):
+        line, = ax.plot([sched, sched],
+                        [min(np.amin(train_loss), np.amin(test_loss)), max(np.amax(train_loss), np.amax(test_loss))],
+                        linewidth=3, color='black')
+        if idx == 0:
+            line.set_label('lr schedule')
+    ax_handles, ax_labels = ax.get_legend_handles_labels()
+    ax.legend(ax_handles, ax_labels, fontsize=20)
+    plt.tight_layout()
+    plt.show()
+    return
 
 
 def main(opts):
