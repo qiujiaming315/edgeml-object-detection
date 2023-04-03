@@ -218,17 +218,18 @@ def fit_KNR(data, opts=_KNROPT):
 @dataclass
 class CNNOpt:
     """Options for the Convolutional Neural Network model."""
-    learning_rate: float = 1e-3  # Initial learning rate.
+    resize: bool = True  # Whether the inputs (feature maps extracted from the weak detector) have the same shape.
+    learning_rate: float = 1e-4  # Initial learning rate.
     gamma: float = 0.1  # Scale for updating learning rate at each milestone.
     weight_decay: float = 1e-5  # Weight decay parameter for optimizer.
     milestones: List = field(default_factory=lambda: [50, 65, 75])  # Epochs to update the learning rate.
     max_epoch: int = 80  # Maximum number of epochs for training.
     batch_size: int = 64  # Batch size for model training.
-    channels: List = field(default_factory=lambda: [256, 128])  # Number of channels in each conv layer.
-    kernels: List = field(default_factory=lambda: [3])  # Kernel size for each conv layer.
-    pools: List = field(default_factory=lambda: [True])  # Whether max-pooling each conv layer.
+    channels: List = field(default_factory=lambda: [256, 256, 128])  # Number of channels in each conv layer.
+    kernels: List = field(default_factory=lambda: [3, 3])  # Kernel size for each conv layer.
+    pools: List = field(default_factory=lambda: [False, False])  # Whether max-pooling each conv layer.
     linear: List = field(
-        default_factory=lambda: [8192, 1024, 128, 1])  # Number of features in each linear after the conv layers.
+        default_factory=lambda: [128, 64, 32, 1])  # Number of features in each linear after the conv layers.
     test_epoch: int = 1  # Number of epochs for periodic test using the validation set.
 
 
@@ -250,7 +251,7 @@ def fit_CNN(data, opts=_CNNOPT, save_opts=_SaveOPT, plot=True):
     device = "cuda" if torch.cuda.is_available() else "cpu"
     print(f"Using {device} device")
     # Build the CNN model.
-    model = EdgeDetectionNet(opts.channels, opts.kernels, opts.pools, opts.linear).to(device)
+    model = EdgeDetectionNet(opts.channels, opts.kernels, opts.pools, opts.linear, opts.resize).to(device)
     print(model)
     # Load weights if specified.
     if save_opts.load and save_opts.model_dir != '':
@@ -264,7 +265,7 @@ def fit_CNN(data, opts=_CNNOPT, save_opts=_SaveOPT, plot=True):
     def train(dataloader, model, loss_fn, optimizer):
         num_batches, size = len(dataloader), len(dataloader.dataset)
         model.train()
-        train_loss = 0
+        train_loss, process = 0, 0
         for batch, (X, y) in enumerate(dataloader):
             X, y = X.to(device), y.to(device)
             # Compute prediction error
@@ -275,9 +276,10 @@ def fit_CNN(data, opts=_CNNOPT, save_opts=_SaveOPT, plot=True):
             loss.backward()
             optimizer.step()
             train_loss += loss.item()
-            if batch % 50 == 0:
-                current = (batch + 1) * len(X)
-                print(f"loss: {train_loss / (batch + 1):>7f}  [{current:>5d}/{size:>5d}]")
+            processed = (batch + 1) * len(X)
+            if processed / size >= process:
+                process += 0.2
+                print(f"loss: {train_loss / (batch + 1):>7f}  [{processed:>5d}/{size:>5d}]")
         return train_loss / num_batches
 
     def test(dataloader, model, loss_fn):
@@ -393,8 +395,8 @@ def main(opts):
         assert opts.model == 'CNN', "Only fully convolutional NN can take input with different shapes. " + \
                                     "Please set model to 'CNN' if you choose to skip the RoI pooling step."
         # Force batch size to 1 and set no linear layers when input feature maps have different shapes.
+        _CNNOPT.resize = False
         _CNNOPT.batch_size = 1
-        _CNNOPT.linear = []
     _SaveOPT.model_dir = opts.model_dir
     result = model((train_feature, val_feature, train_reward, val_reward))
     # Save the estimated offloading reward.

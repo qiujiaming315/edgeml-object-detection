@@ -22,7 +22,7 @@ class EdgeDetectionDataset(Dataset):
 
 
 class EdgeDetectionNet(nn.Module):
-    def __init__(self, channels, kernels, pools, linear):
+    def __init__(self, channels, kernels, pools, linear, resize=True):
         """
         Build a convolutional neural network to predict offloading reward using feature maps from the weak detector.
         :param channels: a list with the number of (input and output) channel for each convolutional layer.
@@ -32,11 +32,13 @@ class EdgeDetectionNet(nn.Module):
         :param linear: a list that specifies the number of (input and output) features in each linear (fully-connected)
                        layer. If an empty list is given, build a fully-convolutional network that ends with
                        global average pooling.
+        :param resize: whether the feature maps are resized to the same shape.
         """
         super(EdgeDetectionNet, self).__init__()
         self.flatten = nn.Flatten()
         self.pool = nn.MaxPool2d(2, 2)
         self.conv_stacks, self.linear_stacks = nn.ModuleList(), nn.ModuleList()
+        self.resize = resize
         # Construct convolutional and linear stacks.
         assert len(channels) > 1 or len(linear) > 1, \
             "Invalid CNN architecture. Please add at least 1 convolutional or linear layer."
@@ -60,10 +62,11 @@ class EdgeDetectionNet(nn.Module):
         """
         conv_layer = nn.Conv2d(in_channels, out_channels, kernel_size, padding='same')
         nn.init.kaiming_uniform_(conv_layer.weight)
-        modules = [conv_layer,
-                   nn.BatchNorm2d(out_channels),
-                   nn.LeakyReLU(0.01),
-                   nn.Dropout(0.4)]
+        modules = [conv_layer]
+        if self.resize:
+            modules.append(nn.BatchNorm2d(out_channels))
+        modules.append(nn.LeakyReLU(0.01))
+        modules.append(nn.Dropout(0.4))
         if pool:
             modules.append(self.pool)
         conv = nn.Sequential(*modules)
@@ -81,7 +84,8 @@ class EdgeDetectionNet(nn.Module):
         torch.nn.init.kaiming_uniform_(linear_layer.weight)
         modules = [linear_layer]
         if not last:
-            modules.append(nn.BatchNorm1d(out_features)),
+            if self.resize:
+                modules.append(nn.BatchNorm1d(out_features))
             modules.append(nn.LeakyReLU(0.01))
             modules.append(nn.Dropout(0.2))
         linear = nn.Sequential(*modules)
@@ -91,10 +95,10 @@ class EdgeDetectionNet(nn.Module):
         """Forward function."""
         for conv in self.conv_stacks:
             x = conv(x)
+        if not self.resize:
+            # Use average pooling if feature maps have different shapes.
+            x = torch.mean(x, dim=(2, 3), keepdim=True)
         x = self.flatten(x)
         for linear in self.linear_stacks:
             x = linear(x)
-        if len(self.linear_stacks) == 0:
-            # Use global average pooling if no fully-connected layer is applied.
-            x = torch.mean(x, dim=-1, keepdim=True)
         return x
