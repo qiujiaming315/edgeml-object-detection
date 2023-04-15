@@ -9,16 +9,13 @@ from pathlib import Path
 from typing import List
 
 from sklearn.preprocessing import StandardScaler
-from sklearn.linear_model import LinearRegression, ElasticNet, BayesianRidge, SGDRegressor
-from sklearn.svm import SVR, LinearSVR
-from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
-from sklearn.neighbors import KNeighborsRegressor
 from sklearn.metrics import mean_squared_error as mse
 
 from lib.data import load_feature
 from lib.nn_model import EdgeDetectionDataset, EdgeDetectionNet
 
-"""Train a regression model that maps the weak detector's intermediate feature map to the offloading reward."""
+"""Train a classification model that maps the weak detector's intermediate feature map to the offloading reward
+class."""
 
 
 @dataclass
@@ -34,12 +31,12 @@ _SaveOPT = SaveOpt()
 
 def fit_model(model, name, data, save_opts=_SaveOPT):
     """
-    Fit a (non-CNN based) regression model that predicts offloading reward based on weak detector feature map.
-    :param model: the regression model.
-    :param name: name of the regression model.
+    Fit a (non-CNN based) classification model that predicts offloading reward class based on weak detector feature map.
+    :param model: the classification model.
+    :param name: name of the classification model.
     :param data: features (inputs) and rewards (labels) for training and validation.
     :param save_opts: model saving options.
-    :return: the estimated offloading reward for the training and validation dataset,
+    :return: the estimated offloading reward class for the training and validation dataset,
              and the average inference time for each image.
     """
     # Retrieve data and flatten the feature maps.
@@ -48,7 +45,7 @@ def fit_model(model, name, data, save_opts=_SaveOPT):
     val_feature = [x.flatten() for x in val_feature]
     # Load model if specified.
     if save_opts.load and save_opts.model_dir != '':
-        reg, scaler = pickle.load(open(os.path.join(save_opts.model_dir, 'wts.pickle'), 'rb'))
+        cls, scaler = pickle.load(open(os.path.join(save_opts.model_dir, 'wts.pickle'), 'rb'))
         # Normalize the data.
         train_feature = scaler.transform(train_feature)
         val_feature = scaler.transform(val_feature)
@@ -57,161 +54,22 @@ def fit_model(model, name, data, save_opts=_SaveOPT):
         # Normalize the data.
         train_feature = scaler.transform(train_feature)
         val_feature = scaler.transform(val_feature)
-        reg = model.fit(train_feature, train_reward)
+        cls = model.fit(train_feature, train_reward)
     # Make predictions for both the training and test set.
     time1 = time.perf_counter()
-    train_est = reg.predict(train_feature)
+    train_est = cls.predict(train_feature)
     time2 = time.perf_counter()
-    val_est = reg.predict(val_feature)
+    val_est = cls.predict(val_feature)
     time3 = time.perf_counter()
     train_time, val_time = (time2 - time1) / len(train_reward), (time3 - time2) / len(val_reward)
+    # Todo: replace the error metric with cross entropy.
     train_mse, val_mse = mse(train_reward, train_est), mse(val_reward, val_est)
     print(f"Trained {name} model with training MSE: {train_mse:.3f}, validation MSE: {val_mse:.3f}")
     # Save model if specified.
     if save_opts.save and save_opts.model_dir != '':
         Path(save_opts.model_dir).mkdir(parents=True, exist_ok=True)
-        pickle.dump((reg, scaler), open(os.path.join(save_opts.model_dir, 'wts.pickle'), 'wb'))
+        pickle.dump((cls, scaler), open(os.path.join(save_opts.model_dir, 'wts.pickle'), 'wb'))
     return {"train_est": train_est, "val_est": val_est, "train_time": train_time, "val_time": val_time}
-
-
-def fit_LR(data):
-    """Fit a linear regression model."""
-    model = LinearRegression()
-    return fit_model(model, "Linear Regression", data)
-
-
-@dataclass
-class ENOpt:
-    """Options for the Elastic net regression model."""
-    alpha: float = 0.005  # Constant that multiplies the penalty terms.
-    l1_ratio: float = 0.5  # The ElasticNet mixing parameter.
-
-
-_ENOPT = ENOpt()
-
-
-def fit_EN(data, opts=_ENOPT):
-    """Fit an elastic net model."""
-    model = ElasticNet(alpha=opts.alpha, l1_ratio=opts.l1_ratio)
-    return fit_model(model, "Elastic Net", data)
-
-
-@dataclass
-class BROpt:
-    """Options for the Bayesian ridge regression model."""
-    alpha_1: float = 1e-6  # Shape parameter for the Gamma distribution prior over the alpha parameter.
-    alpha_2: float = 1e-6  # Rate parameter for the Gamma distribution prior over the alpha parameter.
-    lambda_1: float = 1e-6  # Shape parameter for the Gamma distribution prior over the lambda parameter.
-    lambda_2: float = 1e-6  # Rate parameter for the Gamma distribution prior over the lambda parameter.
-
-
-_BROPT = BROpt()
-
-
-def fit_BR(data, opts=_BROPT):
-    """Fit a Bayesian ridge regression model."""
-    model = BayesianRidge(alpha_1=opts.alpha_1, alpha_2=opts.alpha_2, lambda_1=opts.lambda_1, lambda_2=opts.lambda_2)
-    return fit_model(model, "Bayesian Ridge", data)
-
-
-@dataclass
-class SGDOpt:
-    """Options for the Stochastic Gradient Descent regression model."""
-    alpha: float = 0.0001  # Constant that multiplies the regularization term.
-
-
-_SGDOPT = SGDOpt()
-
-
-def fit_SGD(data, opts=_SGDOPT):
-    """Fit a Stochastic Gradient Descent regressor."""
-    model = SGDRegressor(alpha=opts.alpha)
-    return fit_model(model, "Stochastic Gradient Descent Regressor", data)
-
-
-@dataclass
-class SVROpt:
-    """Options for the support vector regression model."""
-    C: float = 0.1  # Regularization parameter.
-    epsilon: float = 0.1  # Epsilon in the epsilon-SVR model.
-    kernel: str = 'linear'  # Specifies the kernel type to be used in the algorithm. Choose from 'linear', 'poly', 'rbf',
-    # 'sigmoid', 'precomputed'.
-
-
-_SVROPT = SVROpt()
-
-
-def fit_SVR(data, opts=_SVROPT):
-    """Fit a support vector regression model."""
-    model = SVR(kernel=opts.kernel, C=opts.C, epsilon=opts.epsilon)
-    return fit_model(model, "Support Vector Regression", data)
-
-
-@dataclass
-class LSVROpt:
-    """Options for the support vector regression model."""
-    C: float = 0.01  # Regularization parameter.
-    epsilon: float = 0.1  # Epsilon in the epsilon-SVR model.
-
-
-_LSVROPT = LSVROpt()
-
-
-def fit_LSVR(data, opts=_LSVROPT):
-    """Fit a linear support vector regression model."""
-    model = LinearSVR(C=opts.C, epsilon=opts.epsilon)
-    return fit_model(model, "Linear Support Vector Regression", data)
-
-
-@dataclass
-class RFROpt:
-    """Options for the Random Forest regression model."""
-    n_estimators: int = 100  # The number of trees in the forest.
-    max_depth: int = 10  # The maximum depth of the tree.
-    min_samples_split: int = 100  # The minimum number of samples required to split an internal node.
-
-
-_RFROPT = RFROpt()
-
-
-def fit_RFR(data, opts=_RFROPT):
-    """Fit a Random Forest Regressor."""
-    model = RandomForestRegressor(n_estimators=opts.n_estimators, max_depth=opts.max_depth,
-                                  min_samples_split=opts.min_samples_split)
-    return fit_model(model, "Random Forest Regressor", data)
-
-
-@dataclass
-class GBROpt:
-    """Options for the Gradient Boosting regression model."""
-    learning_rate: float = 0.1  # Learning rate shrinks the contribution of each tree by learning_rate.
-    n_estimators: int = 1000  # The number of boosting stages to perform.
-    subsample: float = 1.0  # The fraction of samples to be used for fitting the individual base learners.
-
-
-_GBROPT = GBROpt()
-
-
-def fit_GBR(data, opts=_GBROPT):
-    """Fit a Gradient Boosting Regressor."""
-    model = GradientBoostingRegressor(learning_rate=opts.learning_rate, n_estimators=opts.n_estimators,
-                                      subsample=opts.subsample)
-    return fit_model(model, "Gradient Boosting Regressor", data)
-
-
-@dataclass
-class KNROpt:
-    """Options for the K-nearest Neighbors regression model."""
-    n_neighbors: int = 100  # Number of neighbors to use.
-
-
-_KNROPT = KNROpt()
-
-
-def fit_KNR(data, opts=_KNROPT):
-    """Fit a K Neighbors Regressor."""
-    model = KNeighborsRegressor(n_neighbors=opts.n_neighbors)
-    return fit_model(model, "K Neighbors Regressor", data)
 
 
 @dataclass
@@ -256,7 +114,7 @@ def fit_CNN(data, opts=_CNNOPT, save_opts=_SaveOPT, plot=True):
     if save_opts.load and save_opts.model_dir != '':
         model.load_state_dict(torch.load(os.path.join(save_opts.model_dir, 'wts.pth')))
     # Declare loss function, optimizer, and scheduler.
-    loss_fn = torch.nn.MSELoss()
+    loss_fn = torch.nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=opts.learning_rate, weight_decay=opts.weight_decay)
     scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=opts.milestones, gamma=opts.gamma)
 
@@ -325,6 +183,8 @@ def fit_CNN(data, opts=_CNNOPT, save_opts=_SaveOPT, plot=True):
     if save_opts.save and save_opts.model_dir != '':
         Path(save_opts.model_dir).mkdir(parents=True, exist_ok=True)
         torch.save(model.state_dict(), os.path.join(save_opts.model_dir, 'wts.pth'))
+    train_est = np.argmax(train_est, axis=1)
+    val_est = np.argmax(val_est, axis=1)
     return {"train_est": train_est, "val_est": val_est, "train_time": train_time, "val_time": val_time}
 
 
@@ -373,25 +233,32 @@ def main(opts):
     # Load the offloading rewards for the training dataset.
     train_reward = np.load(opts.train_label)['mapi']
     val_reward = np.load(opts.val_label)['mapi']
-    if opts.normalize:
-        val_reward = np.array([np.sum(train_reward <= x)/len(train_reward) for x in val_reward])
-        train_reward = (np.argsort(np.argsort(train_reward)) + 1) / len(train_reward)
+    # Split the rewards into classes.
+    assert opts.num_class >= 2, "Please pick at least 2 classes to split offloading rewards."
+    train_reward_sorted = np.sort(train_reward)
+    threshold = [train_reward_sorted[int(i / opts.num_class * len(train_reward))] for i in range(opts.num_class + 1)]
+    train_reward_classed, val_reward_classed = np.zeros_like(train_reward), np.zeros_like_like(val_reward)
+    for idx, (thresh_low, thresh_high) in enumerate(zip(threshold[:-1], threshold[1:])):
+        train_reward_classed[np.logical_and(train_reward >= thresh_low, train_reward <= thresh_high)] = idx
+        val_reward_classed[np.logical_and(val_reward >= thresh_low, val_reward <= thresh_high)] = idx
+    # One-hot encode the rewards.
+    train_reward = np.zeros((len(train_reward), opts.num_class), dtype=int)
+    val_reward = np.zeros((len(val_reward), opts.num_class), dtype=int)
+    train_reward[np.arange(len(train_reward)), train_reward_classed] = 1
+    val_reward[np.arange(len(val_reward)), val_reward_classed] = 1
     assert len(train_feature) == len(
         train_reward), "Inconsistent number of training feature maps and offloading rewards."
     assert len(val_feature) == len(
         val_reward), "Inconsistent number of validation feature maps and offloading rewards."
-    # Select and fit the regression model.
-    model_names = ['LR', 'EN', 'BR', 'SGD', 'SVR', 'LSVR', 'RFR', 'GBR', 'KNR', 'CNN']
-    models = [fit_LR, fit_EN, fit_BR, fit_SGD, fit_SVR, fit_LSVR, fit_RFR, fit_GBR, fit_KNR, fit_CNN]
+    # Select and fit the classification model.
+    # TODO: register the classification models.
+    model_names = ['CNN']
+    models = [fit_CNN]
     try:
         model_idx = model_names.index(opts.model)
         model = models[model_idx]
     except ValueError:
-        print("Please select a regression model from 'LR' (Linear Regression), 'EN' (Elastic Net), " +
-              "'BR' (Bayesian Ridge), 'SGD' (Stochastic Gradient Descent), 'SVR' (Support Vector Regression), " +
-              "'LSVR' (Linear Support Vector Regression), 'GBR' (Gradient Boosting Regressor), " +
-              "'RFR' (Random Forest Regressor), 'KNR' (K-nearest Neighbors Regressor), " +
-              "and 'CNN' (Convolutional Neural Network).")
+        print("Please select a classification model from 'CNN' (Convolutional Neural Network).")
     if opts.pool_size == 0 and opts.stage != 24:
         # Check if model selection is consistent with pooling decision.
         assert opts.model == 'CNN', "Only fully convolutional NN can take input with different shapes. " + \
@@ -399,6 +266,10 @@ def main(opts):
         # Force batch size to 1 when input feature maps have different shapes.
         _CNNOPT.resize = False
         _CNNOPT.batch_size = 1
+    if opts.model == 'CNN':
+        # Make sure CNN has at least one linear layer, and the output size should be set to the number of classes.
+        assert len(_CNNOPT.linear) > 0
+        _CNNOPT.linear[-1] = opts.num_class
     _SaveOPT.model_dir = opts.model_dir
     result = model((train_feature, val_feature, train_reward, val_reward))
     # Save the estimated offloading reward.
@@ -415,9 +286,10 @@ def getargs():
     args.add_argument('train_label', help="Path to the offloading reward for the training set.")
     args.add_argument('val_label', help="Path to the offloading reward for the validation set.")
     args.add_argument('save_dir', help="Directory to save the estimated offloading reward.")
-    args.add_argument('--normalize', action='store_false',
-                      help="Whether normalize the offloading reward into a uniform distribution when training the " +
-                           "regression model.")
+    args.add_argument('--num_class', type=int, default=50,
+                      help="The number of classes to split the dataset into. Images are put to different classes " +
+                           "on the rank of their offloading reward. A larger number of classes provides finer " +
+                           "granularity, at the cost of higher model complexity and lower inference accuracy.")
     args.add_argument('--stage', type=int, default=23,
                       help="Stage number of the selected feature map. For yolov5 detectors, this should be a number " +
                            "between [0, 24]. Value between 0-23 stands for intermediate feature map from one of the " +
@@ -425,11 +297,8 @@ def getargs():
     args.add_argument('--pool_size', type=int, default=8,
                       help="Size (H,W) of the feature maps after using RoI pooling. If 0, skip RoI pooling.")
     args.add_argument('--model', type=str, default='LR',
-                      help="Type of the regression model. Available choices include 'LR' (Linear Regression), " +
-                           "'EN' (Elastic Net), 'BR' (Bayesian Ridge), 'SGD' (Stochastic Gradient Descent), " +
-                           "'SVR' (Support Vector Regression), 'LSVR' (Linear Support Vector Regression), " +
-                           "'RFR' (Random Forest Regressor), 'GBR' (Gradient Boosting Regressor), " +
-                           "'KNR' (K-nearest Neighbors Regressor),  and 'CNN' (Convolutional Neural Network).")
+                      help="Type of the classification model. Available choices include 'CNN' (Convolutional Neural " +
+                           "Network).")
     args.add_argument('--model_dir', type=str, default='', help="Directory to save the model weights.")
     return args.parse_args()
 
