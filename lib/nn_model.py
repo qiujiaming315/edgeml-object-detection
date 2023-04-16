@@ -6,9 +6,10 @@ from torch.utils.data import Dataset
 
 
 class EdgeDetectionDataset(Dataset):
-    def __init__(self, inputs, labels):
+    def __init__(self, inputs, labels, regression=True):
         self.labels = labels
         self.inputs = inputs
+        self.regression = regression
 
     def __len__(self):
         return len(self.labels)
@@ -17,7 +18,10 @@ class EdgeDetectionDataset(Dataset):
         x = self.inputs[idx]
         label = self.labels[idx]
         x = torch.from_numpy(x).to(torch.float32)
-        label = torch.tensor([label], dtype=torch.float32)
+        if self.regression:
+            label = torch.tensor([label], dtype=torch.float32)
+        else:
+            label = torch.tensor(label, dtype=torch.int64)
         return x, label
 
 

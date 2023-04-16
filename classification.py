@@ -80,13 +80,13 @@ class CNNOpt:
     gamma: float = 0.1  # Scale for updating learning rate at each milestone.
     weight_decay: float = 1e-5  # Weight decay parameter for optimizer.
     milestones: List = field(default_factory=lambda: [50, 65, 75])  # Epochs to update the learning rate.
-    max_epoch: int = 80  # Maximum number of epochs for training.
+    max_epoch: int = 30  #80  # Maximum number of epochs for training.
     batch_size: int = 64  # Batch size for model training.
-    channels: List = field(default_factory=lambda: [64, 64, 32])  # Number of channels in each conv layer.
-    kernels: List = field(default_factory=lambda: [3, 3])  # Kernel size for each conv layer.
-    pools: List = field(default_factory=lambda: [True, True])  # Whether max-pooling each conv layer.
+    channels: List = field(default_factory=lambda: [])  # Number of channels in each conv layer.
+    kernels: List = field(default_factory=lambda: [])  # Kernel size for each conv layer.
+    pools: List = field(default_factory=lambda: [])  # Whether max-pooling each conv layer.
     linear: List = field(
-        default_factory=lambda: [8192, 1024, 128, 1])  # Number of features in each linear after the conv layers.
+        default_factory=lambda: [145, 64, 64, 64, 50])  # Number of features in each linear after the conv layers.
     test_epoch: int = 1  # Number of epochs for periodic test using the validation set.
 
 
@@ -100,8 +100,8 @@ def fit_CNN(data, opts=_CNNOPT, save_opts=_SaveOPT, plot=True):
     from torch.utils.data import DataLoader
     # Prepare the dataset.
     train_feature, val_feature, train_reward, val_reward = data
-    train_data = EdgeDetectionDataset(train_feature, train_reward)
-    val_data = EdgeDetectionDataset(val_feature, val_reward)
+    train_data = EdgeDetectionDataset(train_feature, train_reward, False)
+    val_data = EdgeDetectionDataset(val_feature, val_reward, False)
     train_dataloader = DataLoader(train_data, batch_size=opts.batch_size)
     val_dataloader = DataLoader(val_data, batch_size=opts.batch_size)
     # Get cpu or gpu device for training.
@@ -124,6 +124,8 @@ def fit_CNN(data, opts=_CNNOPT, save_opts=_SaveOPT, plot=True):
         model.train()
         train_loss, process = 0, 0
         for batch, (X, y) in enumerate(dataloader):
+            print(f"Shape of X [N, C, H, W]: {X.shape}")
+            print(f"Shape of y: {y.shape} {y.dtype}")
             X, y = X.to(device), y.to(device)
             # Compute prediction error
             pred = model(X)
@@ -170,12 +172,12 @@ def fit_CNN(data, opts=_CNNOPT, save_opts=_SaveOPT, plot=True):
         for X, y in train_dataloader:
             X, y = X.to(device), y.to(device)
             train_est.append(model(X).cpu().numpy())
-        train_est = np.concatenate(train_est).flatten()
+        train_est = np.concatenate(train_est)
         time2 = time.perf_counter()
         for X, y in val_dataloader:
             X, y = X.to(device), y.to(device)
             val_est.append(model(X).cpu().numpy())
-        val_est = np.concatenate(val_est).flatten()
+        val_est = np.concatenate(val_est)
         time3 = time.perf_counter()
     train_time = (time2 - time1) / len(train_dataloader.dataset)
     val_time = (time3 - time2) / len(val_dataloader.dataset)
@@ -236,16 +238,15 @@ def main(opts):
     # Split the rewards into classes.
     assert opts.num_class >= 2, "Please pick at least 2 classes to split offloading rewards."
     train_reward_sorted = np.sort(train_reward)
-    threshold = [train_reward_sorted[int(i / opts.num_class * len(train_reward))] for i in range(opts.num_class + 1)]
-    train_reward_classed, val_reward_classed = np.zeros_like(train_reward), np.zeros_like_like(val_reward)
+    threshold = [train_reward_sorted[int(i / opts.num_class * (len(train_reward) - 1))] for i in
+                 range(opts.num_class + 1)]
+    train_reward_classed = np.zeros_like(train_reward, dtype=int)
+    val_reward_classed = np.zeros_like(val_reward, dtype=int)
     for idx, (thresh_low, thresh_high) in enumerate(zip(threshold[:-1], threshold[1:])):
         train_reward_classed[np.logical_and(train_reward >= thresh_low, train_reward <= thresh_high)] = idx
         val_reward_classed[np.logical_and(val_reward >= thresh_low, val_reward <= thresh_high)] = idx
-    # One-hot encode the rewards.
-    train_reward = np.zeros((len(train_reward), opts.num_class), dtype=int)
-    val_reward = np.zeros((len(val_reward), opts.num_class), dtype=int)
-    train_reward[np.arange(len(train_reward)), train_reward_classed] = 1
-    val_reward[np.arange(len(val_reward)), val_reward_classed] = 1
+    train_reward = train_reward_classed
+    val_reward = val_reward_classed
     assert len(train_feature) == len(
         train_reward), "Inconsistent number of training feature maps and offloading rewards."
     assert len(val_feature) == len(
