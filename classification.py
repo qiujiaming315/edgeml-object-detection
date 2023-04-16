@@ -9,7 +9,11 @@ from pathlib import Path
 from typing import List
 
 from sklearn.preprocessing import StandardScaler
-from sklearn.metrics import mean_squared_error as mse
+from sklearn.linear_model import LogisticRegression, RidgeClassifier
+from sklearn.naive_bayes import BernoulliNB, GaussianNB
+from sklearn.svm import LinearSVC
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.neighbors import KNeighborsClassifier
 
 from lib.data import load_feature
 from lib.nn_model import EdgeDetectionDataset, EdgeDetectionNet
@@ -62,14 +66,113 @@ def fit_model(model, name, data, save_opts=_SaveOPT):
     val_est = cls.predict(val_feature)
     time3 = time.perf_counter()
     train_time, val_time = (time2 - time1) / len(train_reward), (time3 - time2) / len(val_reward)
-    # Todo: replace the error metric with cross entropy.
-    train_mse, val_mse = mse(train_reward, train_est), mse(val_reward, val_est)
-    print(f"Trained {name} model with training MSE: {train_mse:.3f}, validation MSE: {val_mse:.3f}")
+    train_acc = np.sum(train_reward == train_est) / len(train_reward)
+    val_acc = np.sum(val_reward == val_est) / len(val_reward)
+    print(f"Trained {name} model with training accuracy: {train_acc:.3f}, validation accuracy: {val_acc:.3f}")
     # Save model if specified.
     if save_opts.save and save_opts.model_dir != '':
         Path(save_opts.model_dir).mkdir(parents=True, exist_ok=True)
         pickle.dump((cls, scaler), open(os.path.join(save_opts.model_dir, 'wts.pickle'), 'wb'))
     return {"train_est": train_est, "val_est": val_est, "train_time": train_time, "val_time": val_time}
+
+
+@dataclass
+class LROpt:
+    """Options for the Logistic Regression model."""
+    C: float = 1.0  # Inverse of regularization strength.
+
+
+_LROPT = LROpt()
+
+
+def fit_LR(data, opts=_LROPT):
+    """Fit a Logistic Regression model."""
+    model = LogisticRegression(C=opts.C, multi_class="multinomial")
+    return fit_model(model, "Logistic Regression", data)
+
+
+@dataclass
+class RCOpt:
+    """Options for the Ridge Classifier model."""
+    alpha: float = 1.0  # Regularization strength.
+
+
+_RCOPT = RCOpt()
+
+
+def fit_RC(data, opts=_RCOPT):
+    """Fit a Ridge Classifier model."""
+    model = RidgeClassifier(alpha=opts.alpha)
+    return fit_model(model, "Ridge Classifier", data)
+
+
+@dataclass
+class BNBOpt:
+    """Options for the Naive Bayes classifier for multivariate Bernoulli models."""
+    alpha: float = 1.0  # Additive (Laplace/Lidstone) smoothing parameter.
+
+
+_BNBOPT = BNBOpt()
+
+
+def fit_BNB(data, opts=_BNBOPT):
+    """Fit a Bernoulli Naive Bayes model."""
+    model = BernoulliNB(alpha=opts.alpha)
+    return fit_model(model, "Bernoulli Naive Bayes", data)
+
+
+def fit_GNB(data):
+    """Fit a Gaussian Naive Bayes model."""
+    model = GaussianNB()
+    return fit_model(model, "Gaussian Naive Bayes", data)
+
+
+@dataclass
+class LSVCOpt:
+    """Options for the Linear Support Vector Classification model."""
+    C: float = 1.0  # Inverse of regularization strength.
+
+
+_LSVCOPT = LSVCOpt()
+
+
+def fit_LSVC(data, opts=_LSVCOPT):
+    """Fit a Linear Support Vector Classification model."""
+    model = LinearSVC(C=opts.C, multi_class="crammer_singer")
+    return fit_model(model, "Linear Support Vector Classification", data)
+
+
+@dataclass
+class RFCOpt:
+    """Options for the Random Forest Classifier model."""
+    n_estimators: int = 100  # The number of trees in the forest.
+    max_depth: int = 10  # The maximum depth of the tree.
+    min_samples_split: int = 100  # The minimum number of samples required to split an internal node.
+
+
+_RFCOPT = RFCOpt()
+
+
+def fit_RFC(data, opts=_RFCOPT):
+    """Fit a Random Forest Classifier model."""
+    model = RandomForestClassifier(n_estimators=opts.n_estimators, max_depth=opts.max_depth,
+                                   min_samples_split=opts.min_samples_split)
+    return fit_model(model, "Random Forest Classifier", data)
+
+
+@dataclass
+class KNCOpt:
+    """Options for the K-Neighbors Classifier model."""
+    n_neighbors: int = 100  # Number of neighbors to use.
+
+
+_KNCOPT = KNCOpt()
+
+
+def fit_KNC(data, opts=_KNCOPT):
+    """Fit a K-Neighbors Classifier model."""
+    model = KNeighborsClassifier(n_neighbors=opts.n_neighbors)
+    return fit_model(model, "K-Neighbors Classifier", data)
 
 
 @dataclass
@@ -80,13 +183,15 @@ class CNNOpt:
     gamma: float = 0.1  # Scale for updating learning rate at each milestone.
     weight_decay: float = 1e-5  # Weight decay parameter for optimizer.
     milestones: List = field(default_factory=lambda: [50, 65, 75])  # Epochs to update the learning rate.
-    max_epoch: int = 30  #80  # Maximum number of epochs for training.
+    # milestones: List = field(default_factory=lambda: [12, 15, 18])  # Epochs to update the learning rate.
+    max_epoch: int = 80  # Maximum number of epochs for training.
     batch_size: int = 64  # Batch size for model training.
-    channels: List = field(default_factory=lambda: [])  # Number of channels in each conv layer.
-    kernels: List = field(default_factory=lambda: [])  # Kernel size for each conv layer.
-    pools: List = field(default_factory=lambda: [])  # Whether max-pooling each conv layer.
+    channels: List = field(default_factory=lambda: [64, 64, 32])  # Number of channels in each conv layer.
+    kernels: List = field(default_factory=lambda: [3, 3])  # Kernel size for each conv layer.
+    pools: List = field(default_factory=lambda: [True, True])  # Whether max-pooling each conv layer.
+    weight: List = field(default_factory=lambda: [])  # A manual rescaling weight given to each class.
     linear: List = field(
-        default_factory=lambda: [145, 64, 64, 64, 50])  # Number of features in each linear after the conv layers.
+        default_factory=lambda: [2048, 512, 64, 50])  # Number of features in each linear after the conv layers.
     test_epoch: int = 1  # Number of epochs for periodic test using the validation set.
 
 
@@ -114,7 +219,10 @@ def fit_CNN(data, opts=_CNNOPT, save_opts=_SaveOPT, plot=True):
     if save_opts.load and save_opts.model_dir != '':
         model.load_state_dict(torch.load(os.path.join(save_opts.model_dir, 'wts.pth')))
     # Declare loss function, optimizer, and scheduler.
-    loss_fn = torch.nn.CrossEntropyLoss()
+    if len(opts.weight) == 0:
+        loss_fn = torch.nn.CrossEntropyLoss()
+    else:
+        loss_fn = torch.nn.CrossEntropyLoss(weight=torch.tensor(opts.weight, dtype=torch.float32).to(device))
     optimizer = torch.optim.Adam(model.parameters(), lr=opts.learning_rate, weight_decay=opts.weight_decay)
     scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=opts.milestones, gamma=opts.gamma)
 
@@ -124,8 +232,6 @@ def fit_CNN(data, opts=_CNNOPT, save_opts=_SaveOPT, plot=True):
         model.train()
         train_loss, process = 0, 0
         for batch, (X, y) in enumerate(dataloader):
-            print(f"Shape of X [N, C, H, W]: {X.shape}")
-            print(f"Shape of y: {y.shape} {y.dtype}")
             X, y = X.to(device), y.to(device)
             # Compute prediction error
             pred = model(X)
@@ -187,6 +293,9 @@ def fit_CNN(data, opts=_CNNOPT, save_opts=_SaveOPT, plot=True):
         torch.save(model.state_dict(), os.path.join(save_opts.model_dir, 'wts.pth'))
     train_est = np.argmax(train_est, axis=1)
     val_est = np.argmax(val_est, axis=1)
+    train_acc = np.sum(train_reward == train_est) / len(train_reward)
+    val_acc = np.sum(val_reward == val_est) / len(val_reward)
+    print(f"Trained CNN model with training accuracy: {train_acc:.3f}, validation accuracy: {val_acc:.3f}")
     return {"train_est": train_est, "val_est": val_est, "train_time": train_time, "val_time": val_time}
 
 
@@ -252,9 +361,8 @@ def main(opts):
     assert len(val_feature) == len(
         val_reward), "Inconsistent number of validation feature maps and offloading rewards."
     # Select and fit the classification model.
-    # TODO: register the classification models.
-    model_names = ['CNN']
-    models = [fit_CNN]
+    model_names = ['LR', 'RC', 'BNB', 'GNB', 'LSVC', 'RFC', 'KNC', 'CNN']
+    models = [fit_LR, fit_RC, fit_BNB, fit_GNB, fit_LSVC, fit_RFC, fit_KNC, fit_CNN]
     try:
         model_idx = model_names.index(opts.model)
         model = models[model_idx]
@@ -271,6 +379,8 @@ def main(opts):
         # Make sure CNN has at least one linear layer, and the output size should be set to the number of classes.
         assert len(_CNNOPT.linear) > 0
         _CNNOPT.linear[-1] = opts.num_class
+        if opts.weight:
+            _CNNOPT.weight = [x + 1 for x in range(opts.num_class)]
     _SaveOPT.model_dir = opts.model_dir
     result = model((train_feature, val_feature, train_reward, val_reward))
     # Save the estimated offloading reward.
@@ -291,6 +401,9 @@ def getargs():
                       help="The number of classes to split the dataset into. Images are put to different classes " +
                            "on the rank of their offloading reward. A larger number of classes provides finer " +
                            "granularity, at the cost of higher model complexity and lower inference accuracy.")
+    args.add_argument('--weight', action='store_false',
+                      help="Whether to apply a rescaling weight to each class when computing cross-entropy loss " +
+                           "during training. Only active when the classification model is 'CNN'.")
     args.add_argument('--stage', type=int, default=23,
                       help="Stage number of the selected feature map. For yolov5 detectors, this should be a number " +
                            "between [0, 24]. Value between 0-23 stands for intermediate feature map from one of the " +
@@ -298,8 +411,10 @@ def getargs():
     args.add_argument('--pool_size', type=int, default=8,
                       help="Size (H,W) of the feature maps after using RoI pooling. If 0, skip RoI pooling.")
     args.add_argument('--model', type=str, default='LR',
-                      help="Type of the classification model. Available choices include 'CNN' (Convolutional Neural " +
-                           "Network).")
+                      help="Type of the classification model. Available choices include 'LR' (Logistic Regression), " +
+                           "'RC' (Ridge Classifier), 'BNB' (Bernoulli Naive Bayes), 'GNB' (Gaussian Naive Bayes), " +
+                           "'LSVC' (Linear Support Vector Classification), 'RFC' (Random Forest Classifier), " +
+                           "'KNC' (K-Neighbors Classifier), 'CNN' (Convolutional Neural Network).")
     args.add_argument('--model_dir', type=str, default='', help="Directory to save the model weights.")
     return args.parse_args()
 
