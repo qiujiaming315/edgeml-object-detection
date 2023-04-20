@@ -183,15 +183,14 @@ class CNNOpt:
     gamma: float = 0.1  # Scale for updating learning rate at each milestone.
     weight_decay: float = 1e-5  # Weight decay parameter for optimizer.
     milestones: List = field(default_factory=lambda: [50, 65, 75])  # Epochs to update the learning rate.
-    # milestones: List = field(default_factory=lambda: [12, 15, 18])  # Epochs to update the learning rate.
     max_epoch: int = 80  # Maximum number of epochs for training.
     batch_size: int = 64  # Batch size for model training.
-    channels: List = field(default_factory=lambda: [64, 64, 32])  # Number of channels in each conv layer.
+    channels: List = field(default_factory=lambda: [256, 256, 128])  # Number of channels in each conv layer.
     kernels: List = field(default_factory=lambda: [3, 3])  # Kernel size for each conv layer.
     pools: List = field(default_factory=lambda: [True, True])  # Whether max-pooling each conv layer.
     weight: List = field(default_factory=lambda: [])  # A manual rescaling weight given to each class.
     linear: List = field(
-        default_factory=lambda: [2048, 512, 64, 50])  # Number of features in each linear after the conv layers.
+        default_factory=lambda: [2048, 512, 64, 100])  # Number of features in each linear after the conv layers.
     test_epoch: int = 1  # Number of epochs for periodic test using the validation set.
 
 

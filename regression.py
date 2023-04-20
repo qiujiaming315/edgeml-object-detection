@@ -415,7 +415,7 @@ def getargs():
     args.add_argument('train_label', help="Path to the offloading reward for the training set.")
     args.add_argument('val_label', help="Path to the offloading reward for the validation set.")
     args.add_argument('save_dir', help="Directory to save the estimated offloading reward.")
-    args.add_argument('--normalize', action='store_false',
+    args.add_argument('--normalize', action='store_true',
                       help="Whether normalize the offloading reward into a uniform distribution when training the " +
                            "regression model.")
     args.add_argument('--stage', type=int, default=23,
