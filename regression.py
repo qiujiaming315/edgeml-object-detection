@@ -27,6 +27,7 @@ class SaveOpt:
     model_dir: str = ''  # Directory to save the model weights.
     load: bool = False  # If model is loaded from pre-trained weights.
     save: bool = True  # If model weights need to be saved after training.
+    model_idx: int = 1  # The index of model in cross validation.
 
 
 _SaveOPT = SaveOpt()
@@ -48,7 +49,7 @@ def fit_model(model, name, data, save_opts=_SaveOPT):
     val_feature = [x.flatten() for x in val_feature]
     # Load model if specified.
     if save_opts.load and save_opts.model_dir != '':
-        reg, scaler = pickle.load(open(os.path.join(save_opts.model_dir, 'wts.pickle'), 'rb'))
+        reg, scaler = pickle.load(open(os.path.join(save_opts.model_dir, f'wts{save_opts.model_idx}.pickle'), 'rb'))
         # Normalize the data.
         train_feature = scaler.transform(train_feature)
         val_feature = scaler.transform(val_feature)
@@ -70,7 +71,7 @@ def fit_model(model, name, data, save_opts=_SaveOPT):
     # Save model if specified.
     if save_opts.save and save_opts.model_dir != '':
         Path(save_opts.model_dir).mkdir(parents=True, exist_ok=True)
-        pickle.dump((reg, scaler), open(os.path.join(save_opts.model_dir, 'wts.pickle'), 'wb'))
+        pickle.dump((reg, scaler), open(os.path.join(save_opts.model_dir, f'wts{save_opts.model_idx}.pickle'), 'wb'))
     return {"train_est": train_est, "val_est": val_est, "train_time": train_time, "val_time": val_time}
 
 
@@ -254,7 +255,7 @@ def fit_CNN(data, opts=_CNNOPT, save_opts=_SaveOPT, plot=True):
     print(model)
     # Load weights if specified.
     if save_opts.load and save_opts.model_dir != '':
-        model.load_state_dict(torch.load(os.path.join(save_opts.model_dir, 'wts.pth')))
+        model.load_state_dict(torch.load(os.path.join(save_opts.model_dir, f'wts{save_opts.model_idx}.pth')))
     # Declare loss function, optimizer, and scheduler.
     loss_fn = torch.nn.MSELoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=opts.learning_rate, weight_decay=opts.weight_decay)
@@ -324,7 +325,7 @@ def fit_CNN(data, opts=_CNNOPT, save_opts=_SaveOPT, plot=True):
     # Save model if specified.
     if save_opts.save and save_opts.model_dir != '':
         Path(save_opts.model_dir).mkdir(parents=True, exist_ok=True)
-        torch.save(model.state_dict(), os.path.join(save_opts.model_dir, 'wts.pth'))
+        torch.save(model.state_dict(), os.path.join(save_opts.model_dir, f'wts{save_opts.model_idx}.pth'))
     return {"train_est": train_est, "val_est": val_est, "train_time": train_time, "val_time": val_time}
 
 
@@ -366,20 +367,15 @@ def CNN_plot(train_loss, test_loss, test_epoch, lr_schedule):
 
 
 def main(opts):
-    # Load the weak detector feature maps for the training and validation dataset.
+    # Load the weak detector feature maps.
     ifpool = opts.pool_size > 0 and opts.stage != 24
-    train_feature = load_feature(opts.train_dir, opts.stage, pool=ifpool, size=opts.pool_size)
-    val_feature = load_feature(opts.val_dir, opts.stage, pool=ifpool, size=opts.pool_size)
-    # Load the offloading rewards for the training dataset.
-    train_reward = np.load(opts.train_label)['mapi']
-    val_reward = np.load(opts.val_label)['mapi']
-    if opts.normalize:
-        val_reward = np.array([np.sum(train_reward <= x)/len(train_reward) for x in val_reward])
-        train_reward = (np.argsort(np.argsort(train_reward)) + 1) / len(train_reward)
-    assert len(train_feature) == len(
-        train_reward), "Inconsistent number of training feature maps and offloading rewards."
-    assert len(val_feature) == len(
-        val_reward), "Inconsistent number of validation feature maps and offloading rewards."
+    feature_data = load_feature(opts.data_dir, opts.stage, pool=ifpool, size=opts.pool_size)
+    # Load the offloading rewards.
+    mapi_data = np.load(opts.mapi_path)['mapi']
+    assert len(feature_data) == len(mapi_data), "Inconsistent number of feature maps and offloading rewards."
+    # Load the dataset split.
+    data_split = np.load(opts.split_path)
+    assert len(mapi_data) == data_split.shape[1], "Inconsistent number of data points from the dataset and the split."
     # Select and fit the regression model.
     model_names = ['LR', 'EN', 'BR', 'SGD', 'SVR', 'LSVR', 'RFR', 'GBR', 'KNR', 'CNN']
     models = [fit_LR, fit_EN, fit_BR, fit_SGD, fit_SVR, fit_LSVR, fit_RFR, fit_GBR, fit_KNR, fit_CNN]
@@ -392,28 +388,40 @@ def main(opts):
               "'LSVR' (Linear Support Vector Regression), 'GBR' (Gradient Boosting Regressor), " +
               "'RFR' (Random Forest Regressor), 'KNR' (K-nearest Neighbors Regressor), " +
               "and 'CNN' (Convolutional Neural Network).")
-    if opts.pool_size == 0 and opts.stage != 24:
-        # Check if model selection is consistent with pooling decision.
-        assert opts.model == 'CNN', "Only fully convolutional NN can take input with different shapes. " + \
-                                    "Please set model to 'CNN' if you choose to skip the RoI pooling step."
-        # Force batch size to 1 when input feature maps have different shapes.
-        _CNNOPT.resize = False
-        _CNNOPT.batch_size = 1
+    if opts.stage != 24:
+        # Check if model and feature map selections are consistent.
+        assert opts.model == 'CNN', "Only fully convolutional NN can take feature maps from hidden layers as inputs."
+        if opts.pool_size == 0:
+            # Force batch size to 1 when input feature maps have different shapes.
+            _CNNOPT.resize = False
+            _CNNOPT.batch_size = 1
     _SaveOPT.model_dir = opts.model_dir
-    result = model((train_feature, val_feature, train_reward, val_reward))
-    # Save the estimated offloading reward.
-    Path(opts.save_dir).mkdir(parents=True, exist_ok=True)
-    np.savez(os.path.join(opts.save_dir, 'estimate.npz'), **result)
+    # Cross validation.
+    for cv_idx, val_mask in enumerate(data_split):
+        # Split the dataset.
+        train_feature = [f for f, v in zip(feature_data, val_mask) if not v]
+        val_feature = [f for f, v in zip(feature_data, val_mask) if v]
+        train_mapi = mapi_data[np.logical_not(val_mask)]
+        val_mapi = mapi_data[val_mask]
+        # Process the data and train the model.
+        if opts.normalize:
+            val_mapi = np.array([np.sum(train_mapi <= x)/len(train_mapi) for x in val_mapi])
+            train_mapi = (np.argsort(np.argsort(train_mapi)) + 1) / len(train_mapi)
+        print(f"==============================Cross Validation Fold {cv_idx + 1}==============================")
+        _SaveOPT.model_idx = cv_idx + 1
+        result = model((train_feature, val_feature, train_mapi, val_mapi))
+        # Save the estimated offloading reward.
+        Path(opts.save_dir).mkdir(parents=True, exist_ok=True)
+        np.savez(os.path.join(opts.save_dir, f'estimate{cv_idx + 1}.npz'), **result)
     return
 
 
 def getargs():
     """Parse command line arguments."""
     args = argparse.ArgumentParser()
-    args.add_argument('train_dir', help="Directory that saves the weak detector feature maps for the training set.")
-    args.add_argument('val_dir', help="Directory that saves the weak detector feature maps for the validation set.")
-    args.add_argument('train_label', help="Path to the offloading reward for the training set.")
-    args.add_argument('val_label', help="Path to the offloading reward for the validation set.")
+    args.add_argument('data_dir', help="Directory that saves the weak detector feature maps.")
+    args.add_argument('mapi_path', help="Path to the offloading reward (precomputed mAPI+).")
+    args.add_argument('split_path', help="Path to the dataset split (for cross validation).")
     args.add_argument('save_dir', help="Directory to save the estimated offloading reward.")
     args.add_argument('--normalize', action='store_true',
                       help="Whether normalize the offloading reward into a uniform distribution when training the " +
