@@ -222,8 +222,8 @@ class CNNOpt:
     learning_rate: float = 1e-2  # Initial learning rate.
     gamma: float = 0.1  # Scale for updating learning rate at each milestone.
     weight_decay: float = 1e-5  # Weight decay parameter for optimizer.
-    milestones: List = field(default_factory=lambda: [50, 65, 75])  # Epochs to update the learning rate.
-    max_epoch: int = 80  # Maximum number of epochs for training.
+    milestones: List = field(default_factory=lambda: [75, 100, 110])  # Epochs to update the learning rate.
+    max_epoch: int = 120  # Maximum number of epochs for training.
     batch_size: int = 64  # Batch size for model training.
     channels: List = field(default_factory=lambda: [])  # Number of channels in each conv layer.
     kernels: List = field(default_factory=lambda: [])  # Kernel size for each conv layer.
@@ -261,9 +261,8 @@ def fit_CNN(data, opts=_CNNOPT, save_opts=_SaveOPT, plot=True):
     optimizer = torch.optim.Adam(model.parameters(), lr=opts.learning_rate, weight_decay=opts.weight_decay)
     scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=opts.milestones, gamma=opts.gamma)
     # Save model if specified.
-    model_save = False
-    if save_opts.save and save_opts.model_dir != '':
-        model_save = True
+    model_save = (save_opts.save and save_opts.model_dir != '')
+    if model_save:
         Path(save_opts.model_dir).mkdir(parents=True, exist_ok=True)
 
     # Define the training and test function.
