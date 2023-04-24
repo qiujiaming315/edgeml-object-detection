@@ -225,6 +225,11 @@ def fit_CNN(data, opts=_CNNOPT, save_opts=_SaveOPT, plot=True):
         loss_fn = torch.nn.CrossEntropyLoss(weight=torch.tensor(opts.weight, dtype=torch.float32).to(device))
     optimizer = torch.optim.Adam(model.parameters(), lr=opts.learning_rate, weight_decay=opts.weight_decay)
     scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=opts.milestones, gamma=opts.gamma)
+    # Save model if specified.
+    model_save = False
+    if save_opts.save and save_opts.model_dir != '':
+        model_save = True
+        Path(save_opts.model_dir).mkdir(parents=True, exist_ok=True)
 
     # Define the training and test function.
     def train(dataloader, model, loss_fn, optimizer):
@@ -261,12 +266,18 @@ def fit_CNN(data, opts=_CNNOPT, save_opts=_SaveOPT, plot=True):
         return test_loss
 
     # The training loop.
+    best_test_err = np.inf
     train_loss, test_loss = list(), list()
     for t in range(opts.max_epoch):
         print(f"Epoch {t + 1}\n-------------------------------")
         train_loss.append(train(train_dataloader, model, loss_fn, optimizer))
         if t % opts.test_epoch == 0:
-            test_loss.append(test(val_dataloader, model, loss_fn))
+            test_loss_value = test(val_dataloader, model, loss_fn)
+            # Save the current best version of the model.
+            if model_save and test_loss_value < best_test_err:
+                best_test_err = test_loss_value
+                torch.save(model.state_dict(), os.path.join(save_opts.model_dir, f'wts{save_opts.model_idx}.pth'))
+            test_loss.append(test_loss_value)
         scheduler.step()
     # Create a plot to visualize the training and test loss as a function of epoch number.
     if plot:
@@ -287,10 +298,6 @@ def fit_CNN(data, opts=_CNNOPT, save_opts=_SaveOPT, plot=True):
         time3 = time.perf_counter()
     train_time = (time2 - time1) / len(train_dataloader.dataset)
     val_time = (time3 - time2) / len(val_dataloader.dataset)
-    # Save model if specified.
-    if save_opts.save and save_opts.model_dir != '':
-        Path(save_opts.model_dir).mkdir(parents=True, exist_ok=True)
-        torch.save(model.state_dict(), os.path.join(save_opts.model_dir, f'wts{save_opts.model_idx}.pth'))
     train_est = np.argmax(train_est, axis=1)
     val_est = np.argmax(val_est, axis=1)
     train_acc = np.sum(train_reward == train_est) / len(train_reward)

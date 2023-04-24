@@ -84,8 +84,8 @@ def fit_LR(data):
 @dataclass
 class ENOpt:
     """Options for the Elastic net regression model."""
-    alpha: float = 0.005  # Constant that multiplies the penalty terms.
-    l1_ratio: float = 0.5  # The ElasticNet mixing parameter.
+    alpha: float = 0.01  # Constant that multiplies the penalty terms.
+    l1_ratio: float = 0.6  # The ElasticNet mixing parameter.
 
 
 _ENOPT = ENOpt()
@@ -118,7 +118,7 @@ def fit_BR(data, opts=_BROPT):
 @dataclass
 class SGDOpt:
     """Options for the Stochastic Gradient Descent regression model."""
-    alpha: float = 0.0001  # Constant that multiplies the regularization term.
+    alpha: float = 0.001  # Constant that multiplies the regularization term.
 
 
 _SGDOPT = SGDOpt()
@@ -133,9 +133,9 @@ def fit_SGD(data, opts=_SGDOPT):
 @dataclass
 class SVROpt:
     """Options for the support vector regression model."""
-    C: float = 0.1  # Regularization parameter.
-    epsilon: float = 0.1  # Epsilon in the epsilon-SVR model.
-    kernel: str = 'linear'  # Specifies the kernel type to be used in the algorithm. Choose from 'linear', 'poly', 'rbf',
+    C: float = 0.01  # Regularization parameter.
+    epsilon: float = 0.01  # Epsilon in the epsilon-SVR model.
+    kernel: str = 'rbf'  # Specifies the kernel type to be used in the algorithm. Choose from 'linear', 'poly', 'rbf',
     # 'sigmoid', 'precomputed'.
 
 
@@ -151,8 +151,8 @@ def fit_SVR(data, opts=_SVROPT):
 @dataclass
 class LSVROpt:
     """Options for the support vector regression model."""
-    C: float = 0.01  # Regularization parameter.
-    epsilon: float = 0.1  # Epsilon in the epsilon-SVR model.
+    C: float = 0.005  # Regularization parameter.
+    epsilon: float = 0.005  # Epsilon in the epsilon-SVR model.
 
 
 _LSVROPT = LSVROpt()
@@ -168,7 +168,7 @@ def fit_LSVR(data, opts=_LSVROPT):
 class RFROpt:
     """Options for the Random Forest regression model."""
     n_estimators: int = 100  # The number of trees in the forest.
-    max_depth: int = 10  # The maximum depth of the tree.
+    max_depth: int = 20  # The maximum depth of the tree.
     min_samples_split: int = 100  # The minimum number of samples required to split an internal node.
 
 
@@ -203,7 +203,7 @@ def fit_GBR(data, opts=_GBROPT):
 @dataclass
 class KNROpt:
     """Options for the K-nearest Neighbors regression model."""
-    n_neighbors: int = 100  # Number of neighbors to use.
+    n_neighbors: int = 500  # Number of neighbors to use.
 
 
 _KNROPT = KNROpt()
@@ -219,17 +219,17 @@ def fit_KNR(data, opts=_KNROPT):
 class CNNOpt:
     """Options for the Convolutional Neural Network model."""
     resize: bool = True  # Whether the inputs (feature maps extracted from the weak detector) have the same shape.
-    learning_rate: float = 1e-3  # Initial learning rate.
+    learning_rate: float = 1e-2  # Initial learning rate.
     gamma: float = 0.1  # Scale for updating learning rate at each milestone.
     weight_decay: float = 1e-5  # Weight decay parameter for optimizer.
     milestones: List = field(default_factory=lambda: [50, 65, 75])  # Epochs to update the learning rate.
     max_epoch: int = 80  # Maximum number of epochs for training.
     batch_size: int = 64  # Batch size for model training.
-    channels: List = field(default_factory=lambda: [64, 64, 32])  # Number of channels in each conv layer.
-    kernels: List = field(default_factory=lambda: [3, 3])  # Kernel size for each conv layer.
-    pools: List = field(default_factory=lambda: [True, True])  # Whether max-pooling each conv layer.
+    channels: List = field(default_factory=lambda: [])  # Number of channels in each conv layer.
+    kernels: List = field(default_factory=lambda: [])  # Kernel size for each conv layer.
+    pools: List = field(default_factory=lambda: [])  # Whether max-pooling each conv layer.
     linear: List = field(
-        default_factory=lambda: [8192, 1024, 128, 1])  # Number of features in each linear after the conv layers.
+        default_factory=lambda: [145, 64, 64, 64, 64, 64, 1])  # Number of features in each linear after the conv layers.
     test_epoch: int = 1  # Number of epochs for periodic test using the validation set.
 
 
@@ -260,6 +260,11 @@ def fit_CNN(data, opts=_CNNOPT, save_opts=_SaveOPT, plot=True):
     loss_fn = torch.nn.MSELoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=opts.learning_rate, weight_decay=opts.weight_decay)
     scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=opts.milestones, gamma=opts.gamma)
+    # Save model if specified.
+    model_save = False
+    if save_opts.save and save_opts.model_dir != '':
+        model_save = True
+        Path(save_opts.model_dir).mkdir(parents=True, exist_ok=True)
 
     # Define the training and test function.
     def train(dataloader, model, loss_fn, optimizer):
@@ -296,12 +301,18 @@ def fit_CNN(data, opts=_CNNOPT, save_opts=_SaveOPT, plot=True):
         return test_loss
 
     # The training loop.
+    best_test_err = np.inf
     train_loss, test_loss = list(), list()
     for t in range(opts.max_epoch):
         print(f"Epoch {t + 1}\n-------------------------------")
         train_loss.append(train(train_dataloader, model, loss_fn, optimizer))
         if t % opts.test_epoch == 0:
-            test_loss.append(test(val_dataloader, model, loss_fn))
+            test_loss_value = test(val_dataloader, model, loss_fn)
+            # Save the current best version of the model.
+            if model_save and test_loss_value < best_test_err:
+                best_test_err = test_loss_value
+                torch.save(model.state_dict(), os.path.join(save_opts.model_dir, f'wts{save_opts.model_idx}.pth'))
+            test_loss.append(test_loss_value)
         scheduler.step()
     # Create a plot to visualize the training and test loss as a function of epoch number.
     if plot:
@@ -322,10 +333,6 @@ def fit_CNN(data, opts=_CNNOPT, save_opts=_SaveOPT, plot=True):
         time3 = time.perf_counter()
     train_time = (time2 - time1) / len(train_dataloader.dataset)
     val_time = (time3 - time2) / len(val_dataloader.dataset)
-    # Save model if specified.
-    if save_opts.save and save_opts.model_dir != '':
-        Path(save_opts.model_dir).mkdir(parents=True, exist_ok=True)
-        torch.save(model.state_dict(), os.path.join(save_opts.model_dir, f'wts{save_opts.model_idx}.pth'))
     return {"train_est": train_est, "val_est": val_est, "train_time": train_time, "val_time": val_time}
 
 
