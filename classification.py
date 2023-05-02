@@ -2,6 +2,7 @@ import numpy as np
 import argparse
 import os
 import time
+import copy
 import pickle
 import matplotlib.pyplot as plt
 from dataclasses import dataclass, field
@@ -15,6 +16,7 @@ from sklearn.svm import LinearSVC
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.neighbors import KNeighborsClassifier
 
+import lib.utils as ut
 from lib.data import load_feature
 from lib.nn_model import EdgeDetectionDataset, EdgeDetectionNet
 
@@ -180,18 +182,18 @@ def fit_KNC(data, opts=_KNCOPT):
 class CNNOpt:
     """Options for the Convolutional Neural Network model."""
     resize: bool = True  # Whether the inputs (feature maps extracted from the weak detector) have the same shape.
-    learning_rate: float = 1e-3  # Initial learning rate.
+    learning_rate: float = 5e-3  # Initial learning rate.
     gamma: float = 0.1  # Scale for updating learning rate at each milestone.
     weight_decay: float = 1e-5  # Weight decay parameter for optimizer.
-    milestones: List = field(default_factory=lambda: [50, 65, 75])  # Epochs to update the learning rate.
-    max_epoch: int = 80  # Maximum number of epochs for training.
+    milestones: List = field(default_factory=lambda: [])  # Epochs to update the learning rate.
+    max_epoch: int = 100  # Maximum number of epochs for training.
     batch_size: int = 64  # Batch size for model training.
-    channels: List = field(default_factory=lambda: [256, 256, 128])  # Number of channels in each conv layer.
-    kernels: List = field(default_factory=lambda: [3, 3])  # Kernel size for each conv layer.
-    pools: List = field(default_factory=lambda: [True, True])  # Whether max-pooling each conv layer.
+    channels: List = field(default_factory=lambda: [])  # Number of channels in each conv layer.
+    kernels: List = field(default_factory=lambda: [])  # Kernel size for each conv layer.
+    pools: List = field(default_factory=lambda: [])  # Whether max-pooling each conv layer.
     weight: List = field(default_factory=lambda: [])  # A manual rescaling weight given to each class.
     linear: List = field(
-        default_factory=lambda: [2048, 512, 64, 100])  # Number of features in each linear after the conv layers.
+        default_factory=lambda: [145, 16, 16, 16, 16, 10])  # Number of features in each linear after the conv layers.
     test_epoch: int = 1  # Number of epochs for periodic test using the validation set.
 
 
@@ -214,10 +216,13 @@ def fit_CNN(data, opts=_CNNOPT, save_opts=_SaveOPT, plot=True):
     print(f"Using {device} device")
     # Build the CNN model.
     model = EdgeDetectionNet(opts.channels, opts.kernels, opts.pools, opts.linear, opts.resize).to(device)
+    best_model = copy.deepcopy(model)
     print(model)
+    # Parse the model saving path.
+    model_best_dir, model_last_dir = ut.parse_path(save_opts.model_dir)
     # Load weights if specified.
     if save_opts.load and save_opts.model_dir != '':
-        model.load_state_dict(torch.load(os.path.join(save_opts.model_dir, f'wts{save_opts.model_idx}.pth')))
+        model.load_state_dict(torch.load(os.path.join(model_last_dir, f'wts{save_opts.model_idx}.pth')))
     # Declare loss function, optimizer, and scheduler.
     if len(opts.weight) == 0:
         loss_fn = torch.nn.CrossEntropyLoss()
@@ -228,7 +233,8 @@ def fit_CNN(data, opts=_CNNOPT, save_opts=_SaveOPT, plot=True):
     # Save model if specified.
     model_save = (save_opts.save and save_opts.model_dir != '')
     if model_save:
-        Path(save_opts.model_dir).mkdir(parents=True, exist_ok=True)
+        Path(model_best_dir).mkdir(parents=True, exist_ok=True)
+        Path(model_last_dir).mkdir(parents=True, exist_ok=True)
 
     # Define the training and test function.
     def train(dataloader, model, loss_fn, optimizer):
@@ -264,6 +270,27 @@ def fit_CNN(data, opts=_CNNOPT, save_opts=_SaveOPT, plot=True):
         print(f"Avg Test Loss: {test_loss:>8f} \n")
         return test_loss
 
+    # Function for estimating the offloading reward of both the training and validation set.
+    def estimate(model, train_dl, val_dl):
+        with torch.no_grad():
+            train_est, val_est = list(), list()
+            time1 = time.perf_counter()
+            for X, y in train_dl:
+                X, y = X.to(device), y.to(device)
+                train_est.append(model(X).cpu().numpy())
+            train_est = np.concatenate(train_est)
+            time2 = time.perf_counter()
+            for X, y in val_dl:
+                X, y = X.to(device), y.to(device)
+                val_est.append(model(X).cpu().numpy())
+            val_est = np.concatenate(val_est)
+            time3 = time.perf_counter()
+        train_time = (time2 - time1) / len(train_dl.dataset)
+        val_time = (time3 - time2) / len(val_dl.dataset)
+        train_est = np.argmax(train_est, axis=1)
+        val_est = np.argmax(val_est, axis=1)
+        return train_est, val_est, train_time, val_time
+
     # The training loop.
     best_test_err = np.inf
     train_loss, test_loss = list(), list()
@@ -273,39 +300,29 @@ def fit_CNN(data, opts=_CNNOPT, save_opts=_SaveOPT, plot=True):
         if t % opts.test_epoch == 0:
             test_loss_value = test(val_dataloader, model, loss_fn)
             # Save the current best version of the model.
-            if model_save and test_loss_value < best_test_err:
+            if test_loss_value < best_test_err:
                 best_test_err = test_loss_value
-                torch.save(model.state_dict(), os.path.join(save_opts.model_dir, f'wts{save_opts.model_idx}.pth'))
+                best_model = copy.deepcopy(model)
             test_loss.append(test_loss_value)
         scheduler.step()
     # Create a plot to visualize the training and test loss as a function of epoch number.
     if plot:
-        CNN_plot(train_loss, test_loss, opts.test_epoch, opts.milestones)
-    # Estimate the offloading reward for both training and validation set.
-    with torch.no_grad():
-        train_est, val_est = list(), list()
-        time1 = time.perf_counter()
-        for X, y in train_dataloader:
-            X, y = X.to(device), y.to(device)
-            train_est.append(model(X).cpu().numpy())
-        train_est = np.concatenate(train_est)
-        time2 = time.perf_counter()
-        for X, y in val_dataloader:
-            X, y = X.to(device), y.to(device)
-            val_est.append(model(X).cpu().numpy())
-        val_est = np.concatenate(val_est)
-        time3 = time.perf_counter()
-    train_time = (time2 - time1) / len(train_dataloader.dataset)
-    val_time = (time3 - time2) / len(val_dataloader.dataset)
-    train_est = np.argmax(train_est, axis=1)
-    val_est = np.argmax(val_est, axis=1)
-    train_acc = np.sum(train_reward == train_est) / len(train_reward)
-    val_acc = np.sum(val_reward == val_est) / len(val_reward)
+        CNN_plot(train_loss, test_loss, opts.test_epoch, opts.milestones, save_opts.model_idx)
+    train_best_est, val_best_est, train_best_time, val_best_time = estimate(best_model, train_dataloader,
+                                                                            val_dataloader)
+    train_last_est, val_last_est, train_last_time, val_last_time = estimate(model, train_dataloader, val_dataloader)
+    if model_save:
+        torch.save(best_model.state_dict(), os.path.join(model_best_dir, f'wts{save_opts.model_idx}.pth'))
+        torch.save(model.state_dict(), os.path.join(model_last_dir, f'wts{save_opts.model_idx}.pth'))
+    train_acc = np.sum(train_reward == train_last_est) / len(train_reward)
+    val_acc = np.sum(val_reward == val_last_est) / len(val_reward)
     print(f"Trained CNN model with training accuracy: {train_acc:.3f}, validation accuracy: {val_acc:.3f}")
-    return {"train_est": train_est, "val_est": val_est, "train_time": train_time, "val_time": val_time}
+    return {"train_est": train_best_est, "val_est": val_best_est, "train_time": train_best_time,
+            "val_time": val_best_time}, {"train_est": train_last_est, "val_est": val_last_est,
+                                         "train_time": train_last_time, "val_time": val_last_time}
 
 
-def CNN_plot(train_loss, test_loss, test_epoch, lr_schedule):
+def CNN_plot(train_loss, test_loss, test_epoch, lr_schedule, index):
     """Visualize the training of CNN model."""
     # Create the plot
     plt.rc("font", family="DejaVu Sans")
@@ -327,6 +344,9 @@ def CNN_plot(train_loss, test_loss, test_epoch, lr_schedule):
             label="train error")
     ax.plot(np.arange(1, len(train_loss) + 1, test_epoch), test_loss, linewidth=3, color='blue', marker='o',
             markersize=15, label="test error")
+    # Plot the smallest validation loss.
+    min_idx = np.argmin(test_loss)
+    ax.scatter(test_epoch * min_idx + 1, test_loss[min_idx], c='orange', s=200, zorder=3, label="min test error")
     # Plot the scheduled learning rate drop epochs.
     for idx, sched in enumerate(lr_schedule):
         line, = ax.plot([sched, sched],
@@ -337,7 +357,7 @@ def CNN_plot(train_loss, test_loss, test_epoch, lr_schedule):
     ax_handles, ax_labels = ax.get_legend_handles_labels()
     ax.legend(ax_handles, ax_labels, fontsize=20)
     plt.tight_layout()
-    plt.savefig('./cnn_training.pdf', bbox_inches='tight')
+    plt.savefig(f'./cnn_training{index}.pdf', bbox_inches='tight')
     plt.show()
     return
 
@@ -378,6 +398,7 @@ def main(opts):
             _CNNOPT.weight = [x + 1 for x in range(opts.num_class)]
     _SaveOPT.model_dir = opts.model_dir
     # Cross validation.
+    save_best_dir, save_last_dir = ut.parse_path(opts.save_dir)
     assert opts.num_class >= 2, "Please pick at least 2 classes to split offloading rewards."
     for cv_idx, val_mask in enumerate(data_split):
         # Split the dataset.
@@ -401,8 +422,11 @@ def main(opts):
         _SaveOPT.model_idx = cv_idx + 1
         result = model((train_feature, val_feature, train_mapi, val_mapi))
         # Save the estimated offloading reward.
-        Path(opts.save_dir).mkdir(parents=True, exist_ok=True)
-        np.savez(os.path.join(opts.save_dir, f'estimate{cv_idx + 1}.npz'), **result)
+        if opts.model != 'CNN':
+            ut.save_result(opts.save_dir, result, cv_idx)
+        else:
+            ut.save_result(save_best_dir, result[0], cv_idx)
+            ut.save_result(save_last_dir, result[1], cv_idx)
     return
 
 
