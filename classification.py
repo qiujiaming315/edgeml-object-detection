@@ -183,17 +183,17 @@ class CNNOpt:
     """Options for the Convolutional Neural Network model."""
     resize: bool = True  # Whether the inputs (feature maps extracted from the weak detector) have the same shape.
     learning_rate: float = 5e-3  # Initial learning rate.
-    gamma: float = 0.1  # Scale for updating learning rate at each milestone.
-    weight_decay: float = 1e-5  # Weight decay parameter for optimizer.
-    milestones: List = field(default_factory=lambda: [])  # Epochs to update the learning rate.
+    gamma: float = 0.5  # Scale for updating learning rate at each milestone.
+    weight_decay: float = 5e-2  # Weight decay parameter for optimizer.
+    milestones: List = field(default_factory=lambda: [60, 75, 90])  # Epochs to update the learning rate.
     max_epoch: int = 100  # Maximum number of epochs for training.
     batch_size: int = 64  # Batch size for model training.
-    channels: List = field(default_factory=lambda: [])  # Number of channels in each conv layer.
-    kernels: List = field(default_factory=lambda: [])  # Kernel size for each conv layer.
-    pools: List = field(default_factory=lambda: [])  # Whether max-pooling each conv layer.
+    channels: List = field(default_factory=lambda: [256, 256, 256])  # Number of channels in each conv layer.
+    kernels: List = field(default_factory=lambda: [3, 3, 3])  # Kernel size for each conv layer.
+    pools: List = field(default_factory=lambda: [True, True, True])  # Whether max-pooling each conv layer.
     weight: List = field(default_factory=lambda: [])  # A manual rescaling weight given to each class.
     linear: List = field(
-        default_factory=lambda: [145, 16, 16, 16, 16, 10])  # Number of features in each linear after the conv layers.
+        default_factory=lambda: [4096, 128, 128, 1])  # Number of features in each linear after the conv layers.
     test_epoch: int = 1  # Number of epochs for periodic test using the validation set.
 
 

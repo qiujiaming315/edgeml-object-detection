@@ -223,15 +223,16 @@ class CNNOpt:
     resize: bool = True  # Whether the inputs (feature maps extracted from the weak detector) have the same shape.
     learning_rate: float = 5e-3  # Initial learning rate.
     gamma: float = 0.5  # Scale for updating learning rate at each milestone.
-    weight_decay: float = 1e-5  # Weight decay parameter for optimizer.
-    milestones: List = field(default_factory=lambda: [50, 60, 70])  # Epochs to update the learning rate.
-    max_epoch: int = 80  # Maximum number of epochs for training.
+    weight_decay: float = 5e-2  # Weight decay parameter for optimizer.
+    milestones: List = field(default_factory=lambda: [60, 75, 90])  # Epochs to update the learning rate.
+    max_epoch: int = 100  # Maximum number of epochs for training.
     batch_size: int = 64  # Batch size for model training.
-    channels: List = field(default_factory=lambda: [256, 1024, 4096])  # Number of channels in each conv layer.
-    kernels: List = field(default_factory=lambda: [3, 3])  # Kernel size for each conv layer.
-    pools: List = field(default_factory=lambda: [True, True])  # Whether max-pooling each conv layer.
+    channels: List = field(default_factory=lambda: [])  # Number of channels in each conv layer.
+    kernels: List = field(default_factory=lambda: [3, 3, 3])  # Kernel size for each conv layer.
+    pools: List = field(default_factory=lambda: [True, True, True])  # Whether max-pooling each conv layer.
+    weight: bool = False  # Whether to assign a rescaling weight given to data point.
     linear: List = field(
-        default_factory=lambda: [65536, 2048, 2048, 2048, 1])  # Number of features in each linear after the conv layers.
+        default_factory=lambda: [145, 16, 16, 16, 16, 1])  # Number of features in each linear after the conv layers.
     test_epoch: int = 1  # Number of epochs for periodic test using the validation set.
 
 
@@ -263,6 +264,8 @@ def fit_CNN(data, opts=_CNNOPT, save_opts=_SaveOPT, plot=True):
         model.load_state_dict(torch.load(os.path.join(model_last_dir, f'wts{save_opts.model_idx}.pth')))
     # Declare loss function, optimizer, and scheduler.
     loss_fn = torch.nn.MSELoss()
+    if opts.weight:
+        loss_fn = lambda input, target: torch.mean((input - target) ** 2 * target ** 2)
     optimizer = torch.optim.Adam(model.parameters(), lr=opts.learning_rate, weight_decay=opts.weight_decay)
     scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=opts.milestones, gamma=opts.gamma)
     # Save model if specified.
@@ -421,6 +424,8 @@ def main(opts):
             # Force batch size to 1 when input feature maps have different shapes.
             _CNNOPT.resize = False
             _CNNOPT.batch_size = 1
+    if opts.model == 'CNN':
+        _CNNOPT.weight = opts.weight and opts.normalize
     _SaveOPT.model_dir = opts.model_dir
     # Cross validation.
     save_best_dir, save_last_dir = ut.parse_path(opts.save_dir)
@@ -456,6 +461,9 @@ def getargs():
     args.add_argument('--normalize', action='store_true',
                       help="Whether normalize the offloading reward into a uniform distribution when training the " +
                            "regression model.")
+    args.add_argument('--weight', action='store_true',
+                      help="Whether to apply a rescaling weight to each data point when computing MSE loss during " +
+                           "training. Only active when 'normalize' is set to true and the regression model is 'CNN'.")
     args.add_argument('--stage', type=int, default=23,
                       help="Stage number of the selected feature map. For yolov5 detectors, this should be a number " +
                            "between [0, 24]. Value between 0-23 stands for intermediate feature map from one of the " +
