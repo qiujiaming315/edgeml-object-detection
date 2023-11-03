@@ -20,23 +20,25 @@ def load_data(path, files, with_conf=False):
     # Read the data from each file.
     for file in files:
         file_path, file_data = os.path.join(path, file), tuple()
-        if os.path.isfile(file_path):
-            with open(file_path, 'r') as f:
+        if os.path.isfile(file_path + ".txt"):
+            with open(file_path + ".txt", 'r') as f:
                 lines = f.readlines()
                 file_data = [line.strip().split(' ') for line in lines]
-                # Parse the labels.
-                if len(file_data) > 0:
-                    file_data = [np.array(x).astype(float) for x in zip(*file_data)]
-                    if with_conf:
-                        file_data = (file_data[0].astype(int),
-                                     xywh2xyxy(np.concatenate([x[:, np.newaxis] for x in file_data[1:-1]], axis=1)),
-                                     file_data[-1])
-                    else:
-                        file_data = (file_data[0].astype(int),
-                                     xywh2xyxy(np.concatenate([x[:, np.newaxis] for x in file_data[1:]], axis=1)))
-                else:
-                    # Place an empty tuple when there is no label.
-                    file_data = tuple()
+        elif os.path.isfile(file_path + ".npy"):
+            file_data = np.load(file_path + ".npy")
+        # Parse the labels.
+        if len(file_data) > 0:
+            file_data = [np.array(x).astype(float) for x in zip(*file_data)]
+            if with_conf:
+                file_data = (file_data[0].astype(int),
+                             xywh2xyxy(np.concatenate([x[:, np.newaxis] for x in file_data[1:-1]], axis=1)),
+                             file_data[-1])
+            else:
+                file_data = (file_data[0].astype(int),
+                             xywh2xyxy(np.concatenate([x[:, np.newaxis] for x in file_data[1:]], axis=1)))
+        else:
+            # Place an empty tuple when there is no label.
+            file_data = tuple()
         data.append(file_data)
     return data
 
@@ -50,6 +52,8 @@ def set_data(weak, strong, label):
     :return: the weak detector's processed output, the strong detector's processed output, and the labels.
     """
     img_names = sorted(os.listdir(label))
+    # Remove the extension from the file names.
+    img_names = ['.'.join(name.split('.')[:-1]) for name in img_names]
     weak_data = load_data(weak, img_names, True)
     strong_data = load_data(strong, img_names, True)
     labels = load_data(label, img_names)
@@ -133,18 +137,22 @@ def extract_output_feature(output_path, feature_path, num_class, k=25):
     # List names of the images whose output features need to be extracted.
     img_names = sorted([f for f in os.listdir(feature_path) if not os.path.isfile(os.path.join(feature_path, f))])
     for img in img_names:
-        output_filename = os.path.join(output_path, img + ".txt")
+        output_filename = os.path.join(output_path, img)
         feature = np.zeros((num_class + 5 * k), dtype=float)
+        file_data = list()
         # Collect features from top-K bounding boxes.
-        if os.path.isfile(output_filename):
-            with open(output_filename, 'r') as f:
+        if os.path.isfile(output_filename + ".txt"):
+            with open(output_filename + ".txt", 'r') as f:
                 lines = f.readlines()
                 file_data = [line.strip().split(' ') for line in lines]
-                # Keep the top-K bounding boxes.
-                file_data = file_data[:k]
-                # Parse the bounding boxes and extract features.
-                for data in file_data:
-                    feature[int(data[0])] += 1
+        elif os.path.isfile(output_filename + ".npy"):
+            file_data = np.load(output_filename + ".npy")
+        if len(file_data) > 0:
+            # Keep the top-K bounding boxes.
+            file_data = file_data[:k]
+            # Parse the bounding boxes and extract features.
+            for data in file_data:
+                feature[int(data[0])] += 1
             file_data = np.array(file_data, dtype=float)[:, 1:]
             feature[num_class:num_class + np.size(file_data)] = file_data.flatten()
         save_path = os.path.join(feature_path, img, "stage24_output_features.npy")

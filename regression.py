@@ -223,13 +223,13 @@ class CNNOpt:
     resize: bool = True  # Whether the inputs (feature maps extracted from the weak detector) have the same shape.
     learning_rate: float = 5e-3  # Initial learning rate.
     gamma: float = 0.5  # Scale for updating learning rate at each milestone.
-    weight_decay: float = 5e-2  # Weight decay parameter for optimizer.
+    weight_decay: float = 5e-5  # Weight decay parameter for optimizer.
     milestones: List = field(default_factory=lambda: [60, 75, 90])  # Epochs to update the learning rate.
     max_epoch: int = 100  # Maximum number of epochs for training.
     batch_size: int = 64  # Batch size for model training.
     channels: List = field(default_factory=lambda: [])  # Number of channels in each conv layer.
-    kernels: List = field(default_factory=lambda: [3, 3, 3])  # Kernel size for each conv layer.
-    pools: List = field(default_factory=lambda: [True, True, True])  # Whether max-pooling each conv layer.
+    kernels: List = field(default_factory=lambda: [3, 3, 3, 3, 3])  # Kernel size for each conv layer.
+    pools: List = field(default_factory=lambda: [True, True, False, False, False])  # Whether max-pooling each conv layer.
     weight: bool = False  # Whether to assign a rescaling weight given to data point.
     linear: List = field(
         default_factory=lambda: [145, 16, 16, 16, 16, 1])  # Number of features in each linear after the conv layers.
@@ -265,7 +265,7 @@ def fit_CNN(data, opts=_CNNOPT, save_opts=_SaveOPT, plot=True):
     # Declare loss function, optimizer, and scheduler.
     loss_fn = torch.nn.MSELoss()
     if opts.weight:
-        loss_fn = lambda input, target: torch.mean((input - target) ** 2 * target ** 2)
+        loss_fn = lambda input, target: torch.mean((input - target) ** 2 * target)
     optimizer = torch.optim.Adam(model.parameters(), lr=opts.learning_rate, weight_decay=opts.weight_decay)
     scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=opts.milestones, gamma=opts.gamma)
     # Save model if specified.
@@ -391,7 +391,7 @@ def CNN_plot(train_loss, test_loss, test_epoch, lr_schedule, index):
     ax.legend(ax_handles, ax_labels, fontsize=20)
     plt.tight_layout()
     plt.savefig(f'./cnn_training{index}.pdf', bbox_inches='tight')
-    plt.show()
+    # plt.show()
     return
 
 
@@ -439,6 +439,7 @@ def main(opts):
         if opts.normalize:
             val_mapi = np.array([np.sum(train_mapi <= x) / len(train_mapi) for x in val_mapi])
             train_mapi = (np.argsort(np.argsort(train_mapi)) + 1) / len(train_mapi)
+            # train_mapi = np.array([np.sum(train_mapi <= x) / len(train_mapi) for x in train_mapi])
         print(f"==============================Cross Validation Fold {cv_idx + 1}==============================")
         _SaveOPT.model_idx = cv_idx + 1
         result = model((train_feature, val_feature, train_mapi, val_mapi))

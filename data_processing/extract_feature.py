@@ -15,7 +15,7 @@ sys.path.insert(0, "../lib/")
 def main(opts):
     num_class = 20 if opts.dataset == "voc" else 80
     # Create the directories to save the feature maps (if they are not created yet).
-    img_names = sorted([f[:-4] for f in os.listdir(opts.label)])
+    img_names = ['.'.join(f.split('.')[:-1]) for f in sorted(os.listdir(opts.label))]
     for img_name in img_names:
         Path(os.path.join(opts.feature, img_name)).mkdir(parents=True, exist_ok=True)
     new_img_names = sorted([f for f in os.listdir(opts.feature) if not os.path.isfile(os.path.join(opts.feature, f))])

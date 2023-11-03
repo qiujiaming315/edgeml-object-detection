@@ -1,6 +1,7 @@
 /viz/
 /.idea/
 /lib/__pycache__/
+/classification.py
 /compute
 /train
 /train_colab
