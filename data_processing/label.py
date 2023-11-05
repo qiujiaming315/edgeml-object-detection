@@ -92,17 +92,17 @@ def voc_label(data, save):
 def main(opts):
     # Choose label processing function according to the specified dataset.
     if opts.dataset == 'coco':
-        coco_label(opts.data, opts.save)
+        coco_label(opts.data_dir, opts.save_dir)
     else:
-        voc_label(opts.data, opts.save)
+        voc_label(opts.data_dir, opts.save_dir)
     return
 
 
 def getargs():
     """Parse command line arguments."""
     args = argparse.ArgumentParser()
-    args.add_argument('data', help="Path to the folder where the dataset is downloaded and extracted.")
-    args.add_argument('save', help="Path to save the labels.")
+    args.add_argument('data_dir', help="Directory where the dataset is downloaded and extracted.")
+    args.add_argument('save_dir', help="Directory to save the processed object annotations.")
     args.add_argument('--dataset', type=str, default="coco", help="The dataset to process ('coco' or 'voc').")
     return args.parse_args()
 

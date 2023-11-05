@@ -32,17 +32,17 @@ def split_dataset(n_img, n_split, save_path, seed=0):
 
 def main(opts):
     # Retrieve the number of images in the dataset.
-    num_img = len(os.listdir(opts.img_path))
-    split_dataset(num_img, opts.num_split, opts.save)
+    num_img = len(os.listdir(opts.img_dir))
+    split_dataset(num_img, opts.num_split, opts.save_path)
     return
 
 
 def getargs():
     """Parse command line arguments."""
     args = argparse.ArgumentParser()
-    args.add_argument('img_path', help="Path to the folder where the images in the (validation) dataset are stored.")
-    args.add_argument('save', help="Path of file to save the dataset split.")
-    args.add_argument('--num_split', type=int, default=5, help="The number of splits.")
+    args.add_argument('img_dir', help="Directory where the images in the (validation) dataset are stored.")
+    args.add_argument('save_path', help="Path of file to save the dataset split.")
+    args.add_argument('--num-split', type=int, default=5, help="The number of splits for cross validation.")
     return args.parse_args()
 
 
