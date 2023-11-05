@@ -70,7 +70,7 @@ def compute_dcsb(img_idx, weak_data, strong_data):
 
 
 def main(opts):
-    weak_data, strong_data, labels = set_data(opts.weak, opts.strong, opts.label)
+    weak_data, strong_data, labels = set_data(opts.weak_dir, opts.strong_dir, opts.label_dir)
     num_ensemble = opts.num_ensemble
     num_img = len(labels)
     start = time.perf_counter()
@@ -87,19 +87,19 @@ def main(opts):
     finish = time.perf_counter()
     execution_time = finish - start
     print(f"Program takes {execution_time:.1f} seconds ({execution_time / 60:.1f}m/{execution_time / 3600:.2f}h).")
-    Path(opts.save).mkdir(parents=True, exist_ok=True)
+    Path(opts.save_dir).mkdir(parents=True, exist_ok=True)
     file_name = f"orie{num_ensemble}.npz" if opts.method == "orie" else "dcsb.npz"
-    np.savez(os.path.join(opts.save, file_name), reward=reward, time=execution_time)
+    np.savez(os.path.join(opts.save_dir, file_name), reward=reward, time=execution_time)
     return
 
 
 def getargs():
     """Parse command line arguments."""
     args = argparse.ArgumentParser()
-    args.add_argument('weak', help="Path to the weak detector output files.")
-    args.add_argument('strong', help="Path to the strong detector output files.")
-    args.add_argument('label', help="Path to the ground truth labels.")
-    args.add_argument('save', help="Path to save the computed computed offloading rewards.")
+    args.add_argument('weak_dir', help="Directory to the weak detector output files.")
+    args.add_argument('strong_dir', help="Directory to the strong detector output files.")
+    args.add_argument('label_dir', help="Directory to the ground truth annotations.")
+    args.add_argument('save_dir', help="Directory to save the computed computed offloading rewards.")
     args.add_argument('--method', type=str, default="orie", choices=['orie', 'dcsb'],
                       help="Method used to compute the offloading reward.")
     args.add_argument('--num-ensemble', type=int, default=1000,

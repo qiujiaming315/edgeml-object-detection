@@ -160,7 +160,7 @@ def getargs():
     args.add_argument('--lr-gamma', default=0.1, type=float,
                       help="decrease lr by a factor of lr-gamma (multisteplr scheduler only)")
     args.add_argument("--resume", default="", type=str, help="path of checkpoint")
-    args.add_argument("--start_epoch", default=0, type=int, help="start epoch")
+    args.add_argument("--start-epoch", default=0, type=int, help="start epoch")
     return args.parse_args()
 
 

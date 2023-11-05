@@ -115,7 +115,7 @@ def getargs():
     args.add_argument('--model', type=str, default="ssd",
                       help="The object detector from torchvision. Available choices include 'ssd', 'faster_rcnn', " +
                            "and 'retinanet'.")
-    args.add_argument("--model_path", type=str, default="",
+    args.add_argument("--model-path", type=str, default="",
                       help="Location of the saved object detection model weights. Use empty string to load default "
                            "weights pre-trained on COCO.")
     return args.parse_args()
