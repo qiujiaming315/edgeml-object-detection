@@ -6,7 +6,9 @@ from pathlib import Path
 from lib.data import set_data
 from lib.metrics import ap_per_class
 
-"""Test the performance of offloading reward estimation(s) by computing the realized mAP after offloading."""
+"""Test the performance of reward estimation(s) by computing the realized mAP in relation to the offloading ratios."""
+# The offloading ratios to evaluate.
+offloading_ratios = np.arange(0, 1.01, 0.1)
 
 
 def test_map(weak_data, strong_data, labels, reward_estimates, dataset_split):
@@ -19,35 +21,32 @@ def test_map(weak_data, strong_data, labels, reward_estimates, dataset_split):
     :param dataset_split: dataset split for cross validation.
     :return: an array of the computed mAP values, one for each reward estimate.
     """
-    mAP = []
+    map_results = []
     # Load reward estimates of each trained model.
     for estimate_path in reward_estimates:
-        mAP_ratios = np.zeros((10,))
+        map_result = np.zeros((len(offloading_ratios),))
+        offload_mask = np.zeros((len(offloading_ratios), len(weak_data)), dtype=bool)
         # Check the mAP of each fold in cross validation.
         for cv_idx, val_mask in enumerate(dataset_split):
-            # Prepare the detection outputs and ground truth labels for the validation set.
-            strong_val = [strong_data[i] for i, m in enumerate(val_mask) if m]
-            weak_val = [weak_data[i] for i, m in enumerate(val_mask) if m]
-            labels_val = [labels[i] for i, m in enumerate(val_mask) if m]
-            labels_val = np.concatenate(labels_val).astype(int)
             # Load the reward estimate.
             reward_data = np.load(os.path.join(estimate_path, f"estimate{cv_idx + 1}.npz"))
-            train_reward = reward_data['train_est']
-            val_reward = reward_data['val_est']
-            for ratio_idx, offload_ratio in enumerate(np.arange(0.1, 1.1, 0.1)):
-                mapi_thresh = train_reward[np.argsort(-train_reward)[int((len(train_reward) - 1) * offload_ratio)]]
-                mapi_thresh = max(0, mapi_thresh)
-                mapi_mask = val_reward > mapi_thresh
-                detection = [strong_val[s] if m else weak_val[s] for s, m in enumerate(mapi_mask)]
-                # Compute the mAP after offloading using the estimated reward with a fixed threshold policy.
-                mAP_ratios[ratio_idx] += np.mean(
-                    ap_per_class(*[np.concatenate(x, axis=0) for x in zip(*detection)], labels_val))
-        mAP.append(mAP_ratios / len(dataset_split))
-    return np.array(mAP)
+            train_reward, val_reward = reward_data['train_est'], reward_data['val_est']
+            for ratio_idx, offload_ratio in enumerate(offloading_ratios):
+                reward_thresh = train_reward[np.argsort(-train_reward)[int((len(train_reward) - 1) * offload_ratio)]]
+                # reward_thresh = max(0, reward_thresh)
+                reward_mask = val_reward > reward_thresh
+                offload_mask[ratio_idx, val_mask] = reward_mask
+        for ratio_idx, mask in enumerate(offload_mask):
+            detection = [strong_data[s] if m else weak_data[s] for s, m in enumerate(mask)]
+            # Compute the mAP after offloading using the estimated reward with a fixed threshold policy.
+            map_result[ratio_idx] = np.mean(ap_per_class(*[np.concatenate(x, axis=0) for x in zip(*detection)], labels))
+        map_results.append(map_result)
+    return np.array(map_results)
 
 
 def main(opts):
     weak_data, strong_data, labels = set_data(opts.weak, opts.strong, opts.label)
+    labels = np.concatenate(labels).astype(int)
     dataset_split = np.load(opts.split_path)
     # Compute realized mAP of each reward estimate.
     estimates = []
@@ -55,9 +54,9 @@ def main(opts):
         estimates = opts.estimates
     elif opts.estimates is not None:
         estimates = [opts.estimates]
-    mAP = test_map(weak_data, strong_data, labels, estimates, dataset_split)
+    map_result = test_map(weak_data, strong_data, labels, estimates, dataset_split)
     Path(opts.save).mkdir(parents=True, exist_ok=True)
-    np.save(os.path.join(opts.save, f'test_map.npy'), mAP)
+    np.save(os.path.join(opts.save, f'test_map.npy'), map_result)
     return
 
 
@@ -69,8 +68,6 @@ def getargs():
     args.add_argument('label', help="Path to the ground truth labels.")
     args.add_argument('split_path', help="Path to the dataset split.")
     args.add_argument('save', help="Path to save the test results.")
-    # args.add_argument('--offload_ratio', type=float, default=0.1,
-    #                   help="Offloading ratio for evaluating the estimated offloading reward.")
     args.add_argument('--estimates', nargs='+', type=str, help='Directories to the reward estimation file(s).')
     return args.parse_args()
 

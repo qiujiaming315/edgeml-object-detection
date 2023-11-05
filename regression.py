@@ -400,11 +400,11 @@ def main(opts):
     ifpool = opts.pool_size > 0 and opts.stage != 24
     feature_data = load_feature(opts.data_dir, opts.stage, pool=ifpool, size=opts.pool_size)
     # Load the offloading rewards.
-    mapi_data = np.load(opts.mapi_path)['mapi']
-    assert len(feature_data) == len(mapi_data), "Inconsistent number of feature maps and offloading rewards."
+    reward_data = np.load(opts.reward_path)['reward']
+    assert len(feature_data) == len(reward_data), "Inconsistent number of feature maps and offloading rewards."
     # Load the dataset split.
     data_split = np.load(opts.split_path)
-    assert len(mapi_data) == data_split.shape[1], "Inconsistent number of data points from the dataset and the split."
+    assert len(reward_data) == data_split.shape[1], "Inconsistent number of data points from the dataset and the split."
     # Select and fit the regression model.
     model_names = ['LR', 'EN', 'BR', 'SGD', 'SVR', 'LSVR', 'RFR', 'GBR', 'KNR', 'CNN']
     models = [fit_LR, fit_EN, fit_BR, fit_SGD, fit_SVR, fit_LSVR, fit_RFR, fit_GBR, fit_KNR, fit_CNN]
@@ -433,16 +433,16 @@ def main(opts):
         # Split the dataset.
         train_feature = [f for f, v in zip(feature_data, val_mask) if not v]
         val_feature = [f for f, v in zip(feature_data, val_mask) if v]
-        train_mapi = mapi_data[np.logical_not(val_mask)]
-        val_mapi = mapi_data[val_mask]
+        train_reward = reward_data[np.logical_not(val_mask)]
+        val_reward = reward_data[val_mask]
         # Process the data and train the model.
         if opts.normalize:
-            val_mapi = np.array([np.sum(train_mapi <= x) / len(train_mapi) for x in val_mapi])
-            train_mapi = (np.argsort(np.argsort(train_mapi)) + 1) / len(train_mapi)
-            # train_mapi = np.array([np.sum(train_mapi <= x) / len(train_mapi) for x in train_mapi])
+            val_reward = np.array([np.sum(train_reward <= x) / len(train_reward) for x in val_reward])
+            train_reward = (np.argsort(np.argsort(train_reward)) + 1) / len(train_reward)
+            # train_reward = np.array([np.sum(train_reward <= x) / len(train_reward) for x in train_reward])
         print(f"==============================Cross Validation Fold {cv_idx + 1}==============================")
         _SaveOPT.model_idx = cv_idx + 1
-        result = model((train_feature, val_feature, train_mapi, val_mapi))
+        result = model((train_feature, val_feature, train_reward, val_reward))
         # Save the estimated offloading reward.
         if opts.model != 'CNN':
             ut.save_result(opts.save_dir, result, cv_idx)
@@ -456,7 +456,7 @@ def getargs():
     """Parse command line arguments."""
     args = argparse.ArgumentParser()
     args.add_argument('data_dir', help="Directory that saves the weak detector feature maps.")
-    args.add_argument('mapi_path', help="Path to the offloading reward (precomputed mAPI+).")
+    args.add_argument('reward_path', help="Path to the (pre-computed) offloading reward.")
     args.add_argument('split_path', help="Path to the dataset split (for cross validation).")
     args.add_argument('save_dir', help="Directory to save the estimated offloading reward.")
     args.add_argument('--normalize', action='store_true',
@@ -470,7 +470,7 @@ def getargs():
                            "between [0, 24]. Value between 0-23 stands for intermediate feature map from one of the " +
                            "hidden layer. 24 stands for feature extracted from detection output.")
     args.add_argument('--pool_size', type=int, default=8,
-                      help="Size (H,W) of the feature maps after using RoI pooling. If 0, skip RoI pooling.")
+                      help="Size (H,W) of the feature maps after resizing. If 0, skip resizing.")
     args.add_argument('--model', type=str, default='LR',
                       help="Type of the regression model. Available choices include 'LR' (Linear Regression), " +
                            "'EN' (Elastic Net), 'BR' (Bayesian Ridge), 'SGD' (Stochastic Gradient Descent), " +

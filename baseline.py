@@ -160,13 +160,14 @@ def get_area(bbox_coord):
 
 def main(opts):
     # Load the offloading rewards.
-    mapi_data = np.load(opts.mapi_path)['mapi']
+    reward_data = np.load(opts.reward_path)['reward']
+    # Transform the reward into binary values since both baseline approaches perform binary classification.
     thresh = 0
-    # thresh = np.sort(mapi_data)[int(0.6 * len(mapi_data))]
-    mapi_data = np.where(mapi_data > thresh, 1, 0)
+    # thresh = np.sort(reward_data)[int(0.6 * len(reward_data))]
+    reward_data = np.where(reward_data > thresh, 1, 0)
     # Load the dataset split.
     data_split = np.load(opts.split_path)
-    assert len(mapi_data) == data_split.shape[1], "Inconsistent number of data points from the dataset and the split."
+    assert len(reward_data) == data_split.shape[1], "Inconsistent number of data points from the dataset and the split."
     if opts.baseline == "af":
         # Load the weak detector feature maps.
         feature_data = load_feature(opts.data_dir, 24, pool=False)
@@ -180,24 +181,24 @@ def main(opts):
         labels = load_data(opts.label_dir, img_names)
         label_num = np.array([0 if len(l) == 0 else len(l[0]) for l in labels], dtype=int)
         _SaveOPT.model_dir = opts.model_dir
-    assert len(feature_data) == len(mapi_data), "Inconsistent number of feature maps and offloading rewards."
+    assert len(feature_data) == len(reward_data), "Inconsistent number of feature maps and offloading rewards."
     # Cross validation.
     for cv_idx, val_mask in enumerate(data_split):
         # Split the dataset.
         train_feature = [f for f, v in zip(feature_data, val_mask) if not v]
         val_feature = [f for f, v in zip(feature_data, val_mask) if v]
-        train_mapi = mapi_data[np.logical_not(val_mask)]
-        val_mapi = mapi_data[val_mask]
+        train_reward = reward_data[np.logical_not(val_mask)]
+        val_reward = reward_data[val_mask]
         # Train the model.
         print(f"==============================Cross Validation Fold {cv_idx + 1}==============================")
         _SaveOPT.model_idx = cv_idx + 1
         if opts.baseline == "af":
-            result = fit_af((train_feature, val_feature, train_mapi, val_mapi), opts.positive_weight)
+            result = fit_af((train_feature, val_feature, train_reward, val_reward), opts.positive_weight)
             # Save the estimated offloading reward.
             ut.save_result(os.path.join(opts.save_dir, f"{opts.positive_weight}"), result, cv_idx)
         else:
             train_label = label_num[np.logical_not(val_mask)]
-            result = fit_dcsb((train_feature, val_feature, train_mapi, val_mapi), train_label)
+            result = fit_dcsb((train_feature, val_feature, train_reward, val_reward), train_label)
             # Save the estimated offloading reward.
             ut.save_result(opts.save_dir, result, cv_idx)
     return
@@ -206,8 +207,11 @@ def main(opts):
 def getargs():
     """Parse command line arguments."""
     args = argparse.ArgumentParser()
-    args.add_argument('data_dir', help="Directory that saves features extracted from the weak detector outputs.")
-    args.add_argument('mapi_path', help="Path to the offloading reward (precomputed mAPI+).")
+    args.add_argument('data_dir',
+                      help="Directory that saves the data needed for predicting the offloading reward. "
+                           "For Adaptive Feeding, this should be features extracted from the weak detector outputs. "
+                           "For DCSB, this should be the weak detector's outputs.")
+    args.add_argument('reward_path', help="Path to the (pre-computed) offloading reward.")
     args.add_argument('split_path', help="Path to the dataset split (for cross validation).")
     args.add_argument('save_dir', help="Directory to save the estimated offloading reward.")
     args.add_argument('--baseline', type=str, default="af", choices=['af', 'dcsb'],
