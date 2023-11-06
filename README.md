@@ -75,5 +75,5 @@ Finally, to evaluate the performance of the reward estimation models in offloadi
 # SPLIT_PATH: path to save the dataset split (for cross validation).
 # SAVE_PATH: path to save the achieved mAP for various offloading ratios.
 # ESTIMATE_PATH: path to the estimated offloading rewards.
-python test.py WEAK_PATH STRONG_PATH LABEL_PATH SPLIT_PATH SAVE_PATH --normalize --estimates ESTIMATE_PATH1 ESTIMATE_PATH2 ESTIMATE_PATH3 ...
+python test.py WEAK_PATH STRONG_PATH LABEL_PATH SPLIT_PATH SAVE_PATH --estimates ESTIMATE_PATH1 ESTIMATE_PATH2 ESTIMATE_PATH3 ...
 ```
