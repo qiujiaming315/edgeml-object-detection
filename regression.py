@@ -397,8 +397,8 @@ def CNN_plot(train_loss, test_loss, test_epoch, lr_schedule, index):
 
 def main(opts):
     # Load the weak detector feature maps.
-    ifpool = opts.pool_size > 0 and opts.stage != 24
-    feature_data = load_feature(opts.data_dir, opts.stage, pool=ifpool, size=opts.pool_size)
+    ifpool = opts.resize > 0 and opts.stage != 24
+    feature_data = load_feature(opts.data_dir, opts.stage, pool=ifpool, size=opts.resize)
     # Load the offloading rewards.
     reward_data = np.load(opts.reward_path)['reward']
     assert len(feature_data) == len(reward_data), "Inconsistent number of feature maps and offloading rewards."
@@ -420,7 +420,7 @@ def main(opts):
     if opts.stage != 24:
         # Check if model and feature map selections are consistent.
         assert opts.model == 'CNN', "Only fully convolutional NN can take feature maps from hidden layers as inputs."
-        if opts.pool_size == 0:
+        if opts.resize == 0:
             # Force batch size to 1 when input feature maps have different shapes.
             _CNNOPT.resize = False
             _CNNOPT.batch_size = 1
@@ -465,19 +465,19 @@ def getargs():
     args.add_argument('--weight', action='store_true',
                       help="Whether to apply a rescaling weight to each data point when computing MSE loss during " +
                            "training. Only active when 'normalize' is set to true and the regression model is 'CNN'.")
-    args.add_argument('--stage', type=int, default=23,
+    args.add_argument('--stage', type=int, default=24,
                       help="Stage number of the selected feature map. For yolov5 detectors, this should be a number " +
                            "between [0, 24]. Value between 0-23 stands for intermediate feature map from one of the " +
                            "hidden layer. 24 stands for feature extracted from detection output.")
-    args.add_argument('--pool_size', type=int, default=8,
+    args.add_argument('--resize', type=int, default=0,
                       help="Size (H,W) of the feature maps after resizing. If 0, skip resizing.")
-    args.add_argument('--model', type=str, default='LR',
+    args.add_argument('--model', type=str, default='CNN',
                       help="Type of the regression model. Available choices include 'LR' (Linear Regression), " +
                            "'EN' (Elastic Net), 'BR' (Bayesian Ridge), 'SGD' (Stochastic Gradient Descent), " +
                            "'SVR' (Support Vector Regression), 'LSVR' (Linear Support Vector Regression), " +
                            "'RFR' (Random Forest Regressor), 'GBR' (Gradient Boosting Regressor), " +
                            "'KNR' (K-nearest Neighbors Regressor),  and 'CNN' (Convolutional Neural Network).")
-    args.add_argument('--model_dir', type=str, default='', help="Directory to save the model weights.")
+    args.add_argument('--model-dir', type=str, default='', help="Directory to save the model weights.")
     return args.parse_args()
 
 

@@ -36,5 +36,44 @@ You may again refer to our `yolov5_scripts.md` for the scripts that collect the 
 
 Once you have collected the detection outputs of an object detector pair, you can use our `reward.py` to compute the ORIE (or ORI and DCSB) value of each image as its offloading reward. An example run looks like:
 ```script
-(PATH_TO_YOUR_WEAK_DETECTOR_OUTPUTS) (PATH_TO_YOUR_STRONG_DETECTOR_OUTPUTS) (PATH_TO_YOUR_DATASET_ANNOTATIONS) (PATH_TO_SAVE_THE_REWARDS) --method orie --num-ensemble 1000
+# Compute ORIE using 1000 ensemble images.
+# WEAK_PATH, STRONG_PATH: path to your weak/strong detector outputs.
+# LABEL_PATH: path to the dataset annotations.
+# SAVE_PATH: path to save the computed rewards.
+python reward.py WEAK_PATH STRONG_PATH LABEL_PATH SAVE_PATH --method orie --num-ensemble 1000
+```
+
+#### Feature Extraction
+
+Next, you need to extract features from the weak detector's results to estimate the offloading reward. We considered two types of features: the outputs, and the intermediate feature maps of the weak detector.
+
+`data_processing/extract_feature.py` can be used to extract features from the top bounding box proposals of the weak detector's outputs.
+
+`yolov5_scripts.md` again provides scripts to extract feature maps from the hidden layers of the weak detector (YOLOv5n).
+
+#### ORIE Estimation
+
+You can now use our `regression.py` to train a regression model as an offloading reward estimator using the extracted features. Here is an example run:
+```script
+# Train a CNN-based model as the reward estimator.
+# FEATURE_PATH: path to the extracted features.
+# REWARD_PATH: path to the computed offloading rewards.
+# SPLIT_PATH: path to save the dataset split (for cross validation).
+# SAVE_PATH: path to save the estimated offloading rewards.
+python regression.py FEATURE_PATH REWARD_PATH SPLIT_PATH SAVE_PATH --normalize --weight --stage 24 --resize 0 --model CNN
+```
+
+Note that, if you are using a CNN (or MLP) based regression model, you first need to manually configure the `CNNOpt` class to set the architecture and other hyper-parameters (e.g., learning rate, weight decay) of the CNN model before running `regression.py`. `CNNOpt` supports setting multiple convolutional layers followed multiple fully-connected layers. Setting no convolutional layer defaults to an MLP model. Please make sure the input features, as well as each hidden layer in the CNN model, have consistent shapes with the next layer before you execute `regression.py`.
+
+#### Offloading Performance Evaluation
+
+Finally, to evaluate the performance of the reward estimation models in offloading images, you can run our `test.py` like:
+```script
+# Train a CNN-based model as the reward estimator.
+# WEAK_PATH, STRONG_PATH: path to your weak/strong detector outputs.
+# LABEL_PATH: path to the dataset annotations.
+# SPLIT_PATH: path to save the dataset split (for cross validation).
+# SAVE_PATH: path to save the achieved mAP for various offloading ratios.
+# ESTIMATE_PATH: path to the estimated offloading rewards.
+python test.py WEAK_PATH STRONG_PATH LABEL_PATH SPLIT_PATH SAVE_PATH --normalize --estimates ESTIMATE_PATH1 ESTIMATE_PATH2 ESTIMATE_PATH3 ...
 ```

@@ -45,7 +45,7 @@ def test_map(weak_data, strong_data, labels, reward_estimates, dataset_split):
 
 
 def main(opts):
-    weak_data, strong_data, labels = set_data(opts.weak, opts.strong, opts.label)
+    weak_data, strong_data, labels = set_data(opts.weak_dir, opts.strong_dir, opts.label_dir)
     labels = np.concatenate(labels).astype(int)
     dataset_split = np.load(opts.split_path)
     # Compute realized mAP of each reward estimate.
@@ -55,19 +55,19 @@ def main(opts):
     elif opts.estimates is not None:
         estimates = [opts.estimates]
     map_result = test_map(weak_data, strong_data, labels, estimates, dataset_split)
-    Path(opts.save).mkdir(parents=True, exist_ok=True)
-    np.save(os.path.join(opts.save, f'test_map.npy'), map_result)
+    Path(opts.save_dir).mkdir(parents=True, exist_ok=True)
+    np.save(os.path.join(opts.save_dir, f'test_map.npy'), map_result)
     return
 
 
 def getargs():
     """Parse command line arguments."""
     args = argparse.ArgumentParser()
-    args.add_argument('weak', help="Path to the weak detector output files (for the validation set).")
-    args.add_argument('strong', help="Path to the strong detector output files (for the validation set).")
-    args.add_argument('label', help="Path to the ground truth labels.")
-    args.add_argument('split_path', help="Path to the dataset split.")
-    args.add_argument('save', help="Path to save the test results.")
+    args.add_argument('weak_dir', help="Directory to the weak detector output files.")
+    args.add_argument('strong_dir', help="Directory to the strong detector output files.")
+    args.add_argument('label_dir', help="Directory to the ground truth annotations.")
+    args.add_argument('split_path', help="Path to the dataset split (for cross validation).")
+    args.add_argument('save_dir', help="Directory to save the achieved mAP.")
     args.add_argument('--estimates', nargs='+', type=str, help='Directories to the reward estimation file(s).')
     return args.parse_args()
 

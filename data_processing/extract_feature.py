@@ -14,22 +14,22 @@ sys.path.insert(0, "../lib/")
 
 def main(opts):
     num_class = 20 if opts.dataset == "voc" else 80
-    # Create the directories to save the feature maps (if they are not created yet).
-    img_names = ['.'.join(f.split('.')[:-1]) for f in sorted(os.listdir(opts.label))]
+    # Create the directories to save the extracted features (if they are not created yet).
+    img_names = ['.'.join(f.split('.')[:-1]) for f in sorted(os.listdir(opts.label_dir))]
     for img_name in img_names:
-        Path(os.path.join(opts.feature, img_name)).mkdir(parents=True, exist_ok=True)
-    new_img_names = sorted([f for f in os.listdir(opts.feature) if not os.path.isfile(os.path.join(opts.feature, f))])
+        Path(os.path.join(opts.save_dir, img_name)).mkdir(parents=True, exist_ok=True)
+    new_img_names = sorted([f for f in os.listdir(opts.save_dir) if not os.path.isfile(os.path.join(opts.save_dir, f))])
     assert len(img_names) == len(new_img_names) and all([i == n for i, n in zip(img_names, new_img_names)])
-    extract_output_feature(opts.output, opts.feature, num_class, opts.k)
+    extract_output_feature(opts.output_dir, opts.save_dir, num_class, opts.k)
     return
 
 
 def getargs():
     """Parse command line arguments."""
     args = argparse.ArgumentParser()
-    args.add_argument('output', help="Path to the (weak detector) detection output files.")
-    args.add_argument('feature', help="Directory where the (weak detector) feature maps are stored.")
-    args.add_argument('label', help="Path to the ground truth labels.")
+    args.add_argument('output_dir', help="Directory to the (weak detector's) detection output files.")
+    args.add_argument('save_dir', help="Directory to save the extracted features.")
+    args.add_argument('label_dir', help="Directory to the ground truth annotations.")
     args.add_argument('--k', type=int, default=25, help="Top-K bounding boxes to collect.")
     args.add_argument('--dataset', type=str, default="coco", help="The dataset to process ('coco' or 'voc').")
     return args.parse_args()
