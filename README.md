@@ -1,10 +1,25 @@
-# Title: To be Added
+# Optimizing Edge Offloading Decisions for Object Detection
 
-todo: insert system diagram here.
+<p align="center">
+    <img src="img/system_overview.png" alt="system_overview" width="50%"/>
+</p>
 
 ## Overview
 
-todo: add link to the paper.
+In this repository, we provide the Python implementation for:
+
+Jiaming Qiu, Ruiqi Wang, Brooks Hu, Roch Guérin, and Chenyang Lu, **"Optimizing Edge Offloading Decisions for Object Detection"**
+[[paper]]()
+[[slides]]()
+[[video]]()
+
+This work is closely related to our earlier papers **"Adaptive Edge Offloading for Image Classification Under Rate Limit"**
+[[paper]](https://ieeexplore.ieee.org/document/9852802)
+[[code]](https://github.com/qiujiaming315/edgeml-dqn)
+
+and **"Real-time Edge Classification: Optimal Offloading under Token Bucket Constraints"**
+[[paper]](https://ieeexplore.ieee.org/document/9708981)
+[[code]](https://github.com/ayanc/edgeml.mdp)
 
 ## Requirements
 
