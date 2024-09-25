@@ -1,7 +1,7 @@
 # Optimizing Edge Offloading Decisions for Object Detection
 
 <p align="center">
-    <img src="img/system_overview.png" alt="system_overview" width="50%"/>
+    <img src="img/system_diagram.png" alt="system_overview" width="80%"/>
 </p>
 
 ## Overview
