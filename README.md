@@ -9,9 +9,8 @@
 In this repository, we provide the Python implementation for:
 
 Jiaming Qiu, Ruiqi Wang, Brooks Hu, Roch Guérin, and Chenyang Lu, **"Optimizing Edge Offloading Decisions for Object Detection"**
-[[paper]]()
-[[slides]]()
-[[video]]()
+[[paper]](https://ieeexplore.ieee.org/document/10817906)
+[[slides]](https://docs.google.com/presentation/d/1rcIzjCHfO89tXF46hV6z5cGeIpvk87Cx/edit?usp=drive_link&ouid=114676858490908185659&rtpof=true&sd=true)
 
 This work is closely related to our earlier papers **"Adaptive Edge Offloading for Image Classification Under Rate Limit"**
 [[paper]](https://ieeexplore.ieee.org/document/9852802)
